@@ -21,7 +21,7 @@ def _safe_suffix(filename, default=""):
 
 
 def source_document_upload_path(instance, filename):
-    ext = _safe_suffix(filename, ".pdf")
+    ext = _safe_suffix(filename)  # PDF ou image (.jpg/.png/.heic…) — l'extension réelle est conservée
     return f"organizations/{instance.organization_id}/source_documents/{uuid.uuid4()}{ext}"
 
 
@@ -70,6 +70,10 @@ class DetectionCategory(TimeStampedModel):
 
 
 class SourceDocument(TimeStampedModel):
+    class Kind(models.TextChoices):
+        PDF = "pdf", "PDF"
+        IMAGE = "image", "Image / photo"
+
     class ExtractionStatus(models.TextChoices):
         PENDING = "pending", "En attente"
         DONE = "done", "Terminée"
@@ -84,15 +88,23 @@ class SourceDocument(TimeStampedModel):
     )
     file = models.FileField(upload_to=source_document_upload_path, max_length=FILE_PATH_MAX_LENGTH)
     original_filename = models.CharField(max_length=255)
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.PDF)
     page_count = models.PositiveIntegerField(null=True, blank=True)
     requires_ocr = models.BooleanField(null=True, blank=True)
     extracted_text = models.TextField(blank=True)
     extraction_status = models.CharField(
         max_length=20, choices=ExtractionStatus.choices, default=ExtractionStatus.PENDING
     )
+    extraction_error = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Raison lisible si l'extraction a échoué (photo illisible, aucun texte détecté…).",
+    )
 
     class Meta:
-        ordering = ["-created_at"]
+        # Ordre d'upload : c'est l'ordre dans lequel les documents sont analysés puis
+        # présentés dans la revue (l'ordre inverse mettait la dernière photo en premier).
+        ordering = ["created_at", "id"]
 
     def __str__(self):
         return self.original_filename

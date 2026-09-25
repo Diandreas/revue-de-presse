@@ -14,7 +14,9 @@ def build_review_drafting_prompt(*, document_titles, chunk_summaries, highlights
         "revue de presse structurée et concise en français, en Markdown (titres, "
         "sections, listes à puces). Structure attendue : un titre, une section "
         "'Résumé exécutif', une section par catégorie de point saillant détecté, une "
-        'conclusion. Réponds uniquement en JSON valide de la forme {"summary_markdown": "..."}.'
+        "conclusion. Réponds uniquement en JSON valide de la forme "
+        '{"summary_markdown": "..."} où la valeur est UNE SEULE chaîne Markdown '
+        "(jamais une liste ni un objet)."
     )
     user_prompt = (
         f"Documents source : {titles_block}\n\n"

@@ -13,7 +13,16 @@ vide, le composant concerné passe simplement en mode "mock" explicite.
 | Variable | Où l'obtenir | Effet si vide |
 |---|---|---|
 | `MISTRAL_API_KEY` | console Mistral AI | `get_mistral_client()` (`apps/ai_pipeline/mistral_client.py`) renvoie `FakeMistralClient` : sorties `[MOCK]` structurellement valides, pipeline démontrable sans clé. |
-| `MISTRAL_MODEL` | — | Par défaut `mistral-large-latest`. |
+| `MISTRAL_MODEL` | — | Modèle d'**analyse du texte** (résumés, points saillants, rédaction). Défaut `ministral-8b-latest`. |
+| `MISTRAL_VISION_MODEL` | — | Modèle de **vision** qui lit les photos / PDF scannés (capacité « vision » requise). Défaut `ministral-8b-latest`. |
+| `OCR_ENGINE` | — | `auto` (défaut : Mistral si clé, sinon Tesseract) \| `mistral` \| `tesseract`. |
+
+**La disponibilité des modèles dépend de l'offre du compte Mistral, et peut changer.** Un modèle
+fermé répond `403 tier_not_allowed`, ou `429` avec `x-ratelimit-limit-req-minute: 0`. Le job passe
+alors en `FAILED` avec un message clair (et n'est pas relancé pour rien). Pour lister ce que la clé
+peut réellement utiliser : `Mistral(api_key=...).models.list()` (champ `capabilities.vision`), puis
+un essai. Modèles `ministral-*` : ouverts aux offres gratuites ; `mistral-small/medium/large` et
+l'API OCR dédiée : selon l'offre.
 
 ## Stripe (paiement carte)
 

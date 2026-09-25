@@ -29,7 +29,7 @@ plusieurs organisations — voir `apps/core/permissions.py`).
 
 | Méthode | Route | Description |
 |---|---|---|
-| GET/POST | `/api/documents/` | Documents en attente (non assignés à un job) / upload PDF. |
+| GET/POST | `/api/documents/` | Documents en attente (non assignés à un job) / upload d'un fichier (`multipart`, champ `file`). Formats acceptés : PDF, ou photo JPG/PNG/WebP/TIFF/HEIC. La réponse porte `kind` (`pdf`\|`image`), `extraction_status` et, si la lecture a échoué, `extraction_error` (raison lisible). Uploader plusieurs fois pour un job multi-documents. |
 | GET/POST | `/api/jobs/` | Liste des jobs / création (`{title, document_ids}` — quota vérifié via l'abonnement). |
 | GET | `/api/jobs/{id}/` | Détail + statut + `step_runs` (pour le polling). |
 | GET | `/api/jobs/{id}/highlights/?category=<type>` | Points saillants détectés, filtrables par type. |

@@ -9,6 +9,8 @@ env/
 *.sqlite3
 /backend/staticfiles/
 /backend/mediafiles/
+/backend/test_mediafiles/
+/backend/.celery_broker/
 /backend/.pytest_cache/
 /backend/htmlcov/
 .coverage

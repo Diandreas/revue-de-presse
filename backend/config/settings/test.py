@@ -12,11 +12,21 @@ CELERY_TASK_EAGER_PROPAGATES = True
 CELERY_BROKER_URL = "memory://"
 CELERY_RESULT_BACKEND = "cache+memory://"
 
+# Celery lit CELERY_BROKER_URL et CELERY_RESULT_BACKEND DIRECTEMENT dans l'environnement,
+# avec priorité sur les settings Django — et django-environ y injecte ceux du .env (hôte
+# Docker `redis`). Sans ce forçage, un test qui démarre un vrai worker tenterait de
+# joindre Redis (broker ET backend de résultats).
+import os  # noqa: E402
+
+os.environ["CELERY_BROKER_URL"] = CELERY_BROKER_URL
+os.environ["CELERY_RESULT_BACKEND"] = CELERY_RESULT_BACKEND
+
 # Les tests ne doivent JAMAIS appeler un service externe réel — même si le .env
 # partagé à la racine (utilisé aussi par le serveur de dev) contient de vraies clés.
 # Sans ça : quota Mistral consommé par la suite de tests, flakiness (rate limiting),
 # risque d'appels Stripe/CamPay réels pendant `pytest`.
 MISTRAL_API_KEY = ""
+OCR_ENGINE = "tesseract"  # jamais d'appel Mistral pour lire une image en test (les tests stubent pytesseract)
 STRIPE_SECRET_KEY = ""
 CAMPAY_APP_USERNAME = ""
 CAMPAY_APP_PASSWORD = ""

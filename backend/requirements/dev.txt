@@ -6,3 +6,6 @@ pytest-cov>=5.0,<5.1
 factory-boy>=3.3,<3.4
 ipython>=8.26,<8.27
 django-extensions>=3.2,<3.3
+
+# Broker fichier de dev sous Windows (CELERY_BROKER_URL=filesystem://) : kombu requiert pywin32
+pywin32>=306; sys_platform == "win32"

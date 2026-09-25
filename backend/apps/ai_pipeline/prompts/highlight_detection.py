@@ -22,8 +22,9 @@ def build_highlight_detection_prompt(chunk_text, categories):
         "correspond clairement à une catégorie — pas de sur-interprétation. Réponds "
         'uniquement en JSON valide de la forme {"highlights": [{"category_name": "...", '
         '"excerpt": "...", "explanation": "...", "confidence": 0.0}]}. Utilise exactement '
-        "le nom de catégorie fourni dans category_name. Renvoie une liste vide si rien "
-        "n'est pertinent.\n\n"
+        "le nom de catégorie fourni dans category_name. \"excerpt\" est une citation EXACTE du "
+        "texte (une chaîne), \"explanation\" une chaîne courte (jamais une liste), \"confidence\" "
+        "un nombre entre 0 et 1. Renvoie une liste vide si rien n'est pertinent.\n\n"
         f"Catégories disponibles :\n{categories_block}"
     )
     user_prompt = f"Extrait à analyser :\n\n{chunk_text}"

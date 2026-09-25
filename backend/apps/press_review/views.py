@@ -1,3 +1,5 @@
+import logging
+
 from django.db.models import ProtectedError, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
@@ -19,17 +21,41 @@ from .serializers import (
     PressReviewJobListSerializer,
     SourceDocumentSerializer,
     SourceDocumentUploadSerializer,
+    classify_upload_kind,
 )
 from .services.jobs import create_press_review_job
+from .services.pipeline import InvalidTransition, mark_dispatch_failed, transition_job
+
+logger = logging.getLogger(__name__)
+
+DISPATCH_FAILED_MESSAGE = (
+    "Impossible de démarrer l'analyse en arrière-plan (file de tâches indisponible). "
+    "Réessayez dans un instant."
+)
 
 
 def _start_pipeline(job):
+    """Met le pipeline en file d'attente et rend la main immédiatement : l'analyse tourne
+    ensuite dans un worker Celery, l'interface suit sa progression par polling."""
     # Import tardif : évite un import circulaire au démarrage (ai_pipeline importe
-    # des modèles de press_review) et permet à ce module de charger même si
-    # ai_pipeline n'est pas encore construit.
+    # des modèles de press_review).
     from apps.ai_pipeline.tasks import run_press_review_pipeline
 
-    run_press_review_pipeline(str(job.id))
+    job.refresh_from_db(fields=["updated_at"])
+    updated_before = job.updated_at
+    try:
+        run_press_review_pipeline(str(job.id))
+    except Exception:
+        logger.exception("Le lancement du pipeline a levé une erreur pour le job %s", job.id)
+        # Deux origines possibles, à distinguer :
+        # - mode eager (dev) : une tâche a tourné puis échoué ; elle a déjà mis le job en
+        #   FAILED avec un message précis (updated_at a changé) -> on ne touche à rien ;
+        # - mise en file impossible (broker injoignable) : aucune tâche n'a tourné
+        #   (updated_at inchangé) -> sans ceci le job resterait bloqué à UPLOADED sans
+        #   aucune erreur visible.
+        job.refresh_from_db(fields=["updated_at"])
+        if job.updated_at == updated_before:
+            mark_dispatch_failed(job, DISPATCH_FAILED_MESSAGE)
 
 
 class DetectionCategoryListCreateView(OrganizationContextMixin, generics.ListCreateAPIView):
@@ -87,6 +113,7 @@ class SourceDocumentListCreateView(OrganizationContextMixin, generics.ListCreate
             uploaded_by=request.user,
             file=f,
             original_filename=f.name,
+            kind=classify_upload_kind(f),
         )
         return Response(SourceDocumentSerializer(document).data, status=status.HTTP_201_CREATED)
 
@@ -196,9 +223,15 @@ class JobRetryView(OrganizationContextMixin, APIView):
         job = get_object_or_404(
             PressReviewJob, pk=pk, organization=request.organization, status=PressReviewJob.Status.FAILED
         )
-        # Ne PAS transitionner ici : task_extract_text le fait déjà elle-même
-        # (FAILED -> TEXT_EXTRACTION est explicitement autorisé). Le faire aussi ici
-        # ferait échouer la tâche sur un double FAILED/TEXT_EXTRACTION -> TEXT_EXTRACTION.
+        # On repasse tout de suite le job en TEXT_EXTRACTION : en arrière-plan, le worker
+        # peut mettre plusieurs secondes à prendre la tâche, et un job resté FAILED
+        # arrêterait le polling du frontend (qui ne suit que les statuts « actifs »).
+        # C'est sûr car task_extract_text est idempotent (enter_step ne re-transitionne
+        # pas un job déjà dans l'étape).
+        try:
+            transition_job(job, PressReviewJob.Status.TEXT_EXTRACTION)
+        except InvalidTransition as exc:
+            raise ValidationError(str(exc)) from exc
         _start_pipeline(job)
         job.refresh_from_db()  # cf. commentaire équivalent dans JobListCreateView.create
         return Response(PressReviewJobDetailSerializer(job).data)

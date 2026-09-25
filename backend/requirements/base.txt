@@ -9,11 +9,12 @@ celery>=5.4,<5.5
 redis>=5.0,<5.1
 psycopg[binary]>=3.2,<3.3
 
-# PDF / OCR
+# PDF / images / OCR
 pdfplumber>=0.11,<0.12
 pdf2image>=1.17,<1.18
 pytesseract>=0.3,<0.4
 Pillow>=10.4,<10.5
+pillow-heif>=0.16,<1.0  # photos iPhone (.heic/.heif) — wheels autoportantes (libheif inclus)
 
 # Export
 weasyprint>=62.0,<63.0

@@ -2,6 +2,7 @@
 Settings communs à tous les environnements. Ne jamais mettre de secret en dur ici :
 tout passe par des variables d'environnement (voir /.env.example à la racine du repo).
 """
+import os
 from datetime import timedelta
 from pathlib import Path
 
@@ -157,6 +158,38 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)
+
+# L'analyse tourne en arrière-plan : si le broker est injoignable, la mise en file doit
+# échouer vite (le job est alors marqué FAILED avec un message clair, cf.
+# press_review.views._start_pipeline) au lieu de bloquer la requête pendant des minutes.
+CELERY_BROKER_CONNECTION_TIMEOUT = 3
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_TASK_PUBLISH_RETRY_POLICY = {"max_retries": 2, "interval_start": 0, "interval_step": 0.5, "interval_max": 1}
+# Une tâche qui pend (OCR d'une image géante, appel réseau bloqué) ne doit pas
+# monopoliser un worker indéfiniment. (Ignoré par le pool `solo` de Windows.)
+CELERY_TASK_SOFT_TIME_LIMIT = 15 * 60
+CELERY_TASK_TIME_LIMIT = 20 * 60
+# Une tâche n'est acquittée qu'à la fin : si le worker meurt en plein traitement, elle
+# est rejouée (les étapes sont idempotentes) au lieu d'être perdue en silence.
+CELERY_TASK_ACKS_LATE = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+
+if CELERY_BROKER_URL.startswith("filesystem://"):
+    # Mode « vrai worker sans Redis ni Docker » (dev Windows, démo) : file de tâches sur
+    # disque. Lancer : CELERY_BROKER_URL=filesystem:// celery -A config worker -P solo
+    _celery_fs_dir = BASE_DIR / ".celery_broker"
+    (_celery_fs_dir / "queue").mkdir(parents=True, exist_ok=True)
+    (_celery_fs_dir / "control").mkdir(parents=True, exist_ok=True)
+    CELERY_BROKER_TRANSPORT_OPTIONS = {
+        "data_folder_in": str(_celery_fs_dir / "queue"),
+        "data_folder_out": str(_celery_fs_dir / "queue"),
+        "control_folder": str(_celery_fs_dir / "control"),
+    }
+    CELERY_RESULT_BACKEND = "cache+memory://"  # nos tâches n'exploitent pas les résultats
+    # Celery lit aussi CELERY_RESULT_BACKEND dans l'environnement, prioritaire sur les
+    # settings : le .env (Redis Docker) l'y injecte -> on le neutralise pour ce mode.
+    os.environ["CELERY_RESULT_BACKEND"] = CELERY_RESULT_BACKEND
+
 if CELERY_TASK_ALWAYS_EAGER:
     # Mode synchrone (tests, ou dev sans worker/Redis) : inutile d'exiger un vrai
     # broker Redis, ça ne fait que retarder chaque requête de ~2 minutes en retries
@@ -174,7 +207,12 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="no-reply@revue-de-presse
 
 # --- Mistral ---
 MISTRAL_API_KEY = env("MISTRAL_API_KEY", default="")
-MISTRAL_MODEL = env("MISTRAL_MODEL", default="mistral-large-latest")
+# Modèle d'analyse du texte (résumés, points saillants, rédaction de la revue).
+MISTRAL_MODEL = env("MISTRAL_MODEL", default="ministral-8b-latest")
+# Modèle de VISION qui lit les photos / PDF scannés (doit déclarer la capacité « vision »).
+MISTRAL_VISION_MODEL = env("MISTRAL_VISION_MODEL", default="ministral-8b-latest")
+# Moteur de lecture des photos : auto (Mistral si clé présente, sinon Tesseract) | mistral | tesseract
+OCR_ENGINE = env("OCR_ENGINE", default="auto")
 
 # --- Stripe ---
 STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")

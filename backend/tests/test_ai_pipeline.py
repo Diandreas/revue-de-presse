@@ -1,6 +1,8 @@
+import pytest
 from django.conf import settings
 from django.test import override_settings
 
+from apps.ai_pipeline import mistral_client as mc
 from apps.ai_pipeline.chunking import chunk_document_text
 from apps.ai_pipeline.extraction import _needs_ocr
 from apps.ai_pipeline.mistral_client import FakeMistralClient, MistralClient, get_mistral_client
@@ -68,3 +70,46 @@ def test_fake_mistral_client_review_drafting_shape():
     result = FakeMistralClient().complete_json(system_prompt="", user_prompt="", response_hint="review_drafting")
     assert "summary_markdown" in result
     assert "MOCK" in result["summary_markdown"]
+
+
+class _FakeChat:
+    def __init__(self, fail_times):
+        self.fail_times = fail_times
+        self.calls = 0
+
+    def complete(self, **kwargs):
+        self.calls += 1
+        if self.calls <= self.fail_times:
+            raise RuntimeError('API error occurred: Status 429. Body: {"type":"rate_limited"}')
+
+        class _Resp:
+            choices = [type("C", (), {"message": type("M", (), {"content": '{"summary": "ok"}'})()})()]
+
+        return _Resp()
+
+
+def _client_with(fake_chat, monkeypatch):
+    monkeypatch.setattr(mc.time, "sleep", lambda _s: None)
+    client = MistralClient(api_key="x", model="m")
+    client._client = type("SDK", (), {"chat": fake_chat})()
+    return client
+
+
+def test_mistral_client_retries_then_succeeds_on_429(monkeypatch):
+    chat = _FakeChat(fail_times=2)
+    client = _client_with(chat, monkeypatch)
+
+    result = client.complete_json(system_prompt="", user_prompt="", response_hint="chunk_summary")
+
+    assert result == {"summary": "ok"}
+    assert chat.calls == 3
+
+
+def test_mistral_client_gives_up_after_max_429_retries(monkeypatch):
+    chat = _FakeChat(fail_times=99)
+    client = _client_with(chat, monkeypatch)
+
+    with pytest.raises(RuntimeError):
+        client.complete_json(system_prompt="", user_prompt="", response_hint="chunk_summary")
+
+    assert chat.calls == mc.RATE_LIMIT_MAX_RETRIES + 1
