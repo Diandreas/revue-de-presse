@@ -40,11 +40,11 @@ export default function TeamPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold text-slate-900">Équipe</h1>
+      <h1 className="page-title">Équipe</h1>
       <p className="mt-1 text-sm text-slate-500">Gérez les membres de votre organisation et leurs rôles.</p>
 
       <div className="card mt-6">
-        <h2 className="text-sm font-semibold text-slate-900">Inviter un membre</h2>
+        <h2 className="section-title">Inviter un membre</h2>
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <div className="min-w-[220px] flex-1">
             <label className="label">Email</label>

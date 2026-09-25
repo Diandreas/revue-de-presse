@@ -1,28 +1,36 @@
 import clsx from 'clsx'
 
-type Tone = 'slate' | 'blue' | 'amber' | 'green' | 'red'
+type Tone = 'slate' | 'brand' | 'amber' | 'green' | 'red'
 
 const TONE_CLASSES: Record<Tone, string> = {
-  slate: 'bg-slate-100 text-slate-700',
-  blue: 'bg-blue-100 text-blue-700',
-  amber: 'bg-amber-100 text-amber-800',
-  green: 'bg-green-100 text-green-700',
-  red: 'bg-red-100 text-red-700',
+  slate: 'bg-slate-100 text-slate-600',
+  brand: 'bg-brand-50 text-brand-700',
+  amber: 'bg-amber-50 text-amber-700',
+  green: 'bg-emerald-50 text-emerald-700',
+  red: 'bg-red-50 text-red-700',
 }
 
-const JOB_STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
+const DOT_CLASSES: Record<Tone, string> = {
+  slate: 'bg-slate-400',
+  brand: 'bg-brand-500',
+  amber: 'bg-amber-500',
+  green: 'bg-emerald-500',
+  red: 'bg-red-500',
+}
+
+const JOB_STATUS_LABELS: Record<string, { label: string; tone: Tone; pulse?: boolean }> = {
   UPLOADED: { label: 'Téléversé', tone: 'slate' },
-  TEXT_EXTRACTION: { label: 'Extraction du texte', tone: 'blue' },
-  CHUNKING_SUMMARIZATION: { label: 'Découpage & résumé', tone: 'blue' },
-  HIGHLIGHT_DETECTION: { label: 'Détection des points saillants', tone: 'blue' },
-  REVIEW_DRAFTING: { label: 'Rédaction de la revue', tone: 'blue' },
+  TEXT_EXTRACTION: { label: 'Extraction du texte', tone: 'brand', pulse: true },
+  CHUNKING_SUMMARIZATION: { label: 'Découpage & résumé', tone: 'brand', pulse: true },
+  HIGHLIGHT_DETECTION: { label: 'Détection des points saillants', tone: 'brand', pulse: true },
+  REVIEW_DRAFTING: { label: 'Rédaction de la revue', tone: 'brand', pulse: true },
   REVIEW_READY: { label: 'Revue prête', tone: 'green' },
   EXPORTED: { label: 'Exportée', tone: 'green' },
   FAILED: { label: 'Échec', tone: 'red' },
 }
 
 const SUBSCRIPTION_STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
-  trialing: { label: 'Essai', tone: 'blue' },
+  trialing: { label: 'Essai', tone: 'brand' },
   active: { label: 'Active', tone: 'green' },
   past_due: { label: 'En retard', tone: 'amber' },
   canceled: { label: 'Annulée', tone: 'red' },
@@ -37,9 +45,10 @@ const INVOICE_STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
   refunded: { label: 'Remboursée', tone: 'slate' },
 }
 
-function Badge({ label, tone }: { label: string; tone: Tone }) {
+function Badge({ label, tone, pulse }: { label: string; tone: Tone; pulse?: boolean }) {
   return (
-    <span className={clsx('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium', TONE_CLASSES[tone])}>
+    <span className={clsx('chip', TONE_CLASSES[tone])}>
+      <span className={clsx('h-1.5 w-1.5 rounded-full', DOT_CLASSES[tone], pulse && 'animate-pulse')} />
       {label}
     </span>
   )
@@ -47,7 +56,7 @@ function Badge({ label, tone }: { label: string; tone: Tone }) {
 
 export function JobStatusBadge({ status }: { status: string }) {
   const entry = JOB_STATUS_LABELS[status] ?? { label: status, tone: 'slate' as Tone }
-  return <Badge label={entry.label} tone={entry.tone} />
+  return <Badge label={entry.label} tone={entry.tone} pulse={entry.pulse} />
 }
 
 export function SubscriptionStatusBadge({ status }: { status: string }) {

@@ -94,7 +94,7 @@ export default function CategoriesPage() {
     <div>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">Catégories de détection</h1>
+          <h1 className="page-title">Catégories de détection</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
             Ces catégories guident l&apos;IA pour surligner les points juridiques, importants et les intox
             potentielles. Les catégories globales sont gérées par l&apos;équipe Revue de Presse ; vous pouvez ajouter
@@ -108,7 +108,7 @@ export default function CategoriesPage() {
 
       {showForm && (
         <div className="card mt-6">
-          <h2 className="text-sm font-semibold text-slate-900">{editingId ? 'Modifier la catégorie' : 'Nouvelle catégorie'}</h2>
+          <h2 className="section-title">{editingId ? 'Modifier la catégorie' : 'Nouvelle catégorie'}</h2>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div>
               <label className="label">Nom</label>

@@ -39,14 +39,17 @@ export interface DetectionCategory {
 }
 
 export type ExtractionStatus = 'pending' | 'done' | 'failed'
+export type SourceDocumentKind = 'pdf' | 'image'
 
 export interface SourceDocument {
   id: string
   file: string
   original_filename: string
+  kind: SourceDocumentKind
   page_count: number | null
   requires_ocr: boolean | null
   extraction_status: ExtractionStatus
+  extraction_error: string
   job: string | null
   created_at: string
 }

@@ -23,7 +23,7 @@ function formatDate(value: string | null) {
 }
 
 export default function BillingPage() {
-  const { data: subscription } = useSubscription()
+  const { data: subscription, isLoading: subscriptionLoading } = useSubscription()
   const { data: plans, isLoading: plansLoading } = usePlans()
   const { data: invoices } = useInvoices()
 
@@ -92,12 +92,14 @@ export default function BillingPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold text-slate-900">Abonnement</h1>
+      <h1 className="page-title">Abonnement</h1>
       <p className="mt-1 text-sm text-slate-500">Gérez le plan et le moyen de paiement de votre organisation.</p>
 
       <div className="card mt-6">
-        <h2 className="text-sm font-semibold text-slate-900">Abonnement actuel</h2>
-        {subscription ? (
+        <h2 className="section-title">Abonnement actuel</h2>
+        {subscriptionLoading ? (
+          <div className="mt-3 h-11 animate-pulse rounded-lg bg-slate-100" />
+        ) : subscription ? (
           <div className="mt-3 flex items-center justify-between">
             <div>
               <p className="text-sm text-slate-800">
@@ -185,7 +187,7 @@ export default function BillingPage() {
       {actionResult && <p className="mt-4 text-sm text-green-700">{actionResult}</p>}
 
       <div className="card mt-6">
-        <h2 className="text-sm font-semibold text-slate-900">Factures</h2>
+        <h2 className="section-title">Factures</h2>
         <div className="mt-3 space-y-2">
           {invoices?.length === 0 && <p className="text-sm text-slate-500">Aucune facture pour l’instant.</p>}
           {invoices?.map((invoice) => (

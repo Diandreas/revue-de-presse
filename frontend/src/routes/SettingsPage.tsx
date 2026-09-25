@@ -24,11 +24,11 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold text-slate-900">Paramètres</h1>
+      <h1 className="page-title">Paramètres</h1>
       <p className="mt-1 text-sm text-slate-500">Informations de votre compte et de votre organisation.</p>
 
       <div className="card mt-6">
-        <h2 className="text-sm font-semibold text-slate-900">Votre compte</h2>
+        <h2 className="section-title">Votre compte</h2>
         <dl className="mt-3 space-y-2 text-sm">
           <div className="flex justify-between">
             <dt className="text-slate-500">Email</dt>
@@ -42,7 +42,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="card mt-6">
-        <h2 className="text-sm font-semibold text-slate-900">Organisation</h2>
+        <h2 className="section-title">Organisation</h2>
         <div className="mt-3">
           <label className="label">Nom de l&apos;organisation</label>
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} />

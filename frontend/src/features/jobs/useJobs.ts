@@ -19,6 +19,9 @@ export function useJobs() {
       return res.data.results
     },
     refetchInterval: 8000,
+    // L'analyse continue en arrière-plan pendant que l'utilisateur est ailleurs : au retour
+    // sur l'onglet, on rafraîchit tout de suite (le polling est en pause onglet masqué).
+    refetchOnWindowFocus: true,
   })
 }
 
@@ -31,6 +34,7 @@ export function useJob(jobId: string | undefined) {
     },
     enabled: Boolean(jobId),
     refetchInterval: (query) => (query.state.data && ACTIVE_STATUSES.has(query.state.data.status) ? 3000 : false),
+    refetchOnWindowFocus: true, // cf. useJobs : retour sur l'onglet = état à jour immédiatement
   })
 }
 

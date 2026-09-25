@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useParams } from 'react-router-dom'
 import { extractErrorMessage } from '../api/client'
+import { DocumentsList } from '../components/DocumentsList'
 import { ProgressBar, ProgressStepper } from '../components/ProgressStepper'
 import { JobStatusBadge } from '../components/StatusBadge'
 import { useExportReview, useJob, useJobHighlights, useJobReview, useRetryJob } from '../features/jobs/useJobs'
@@ -33,6 +34,7 @@ export default function JobDetailPage() {
     return <p className="text-sm text-slate-500">Chargement…</p>
   }
 
+  const skippedCount = job.documents.filter((d) => d.extraction_status === 'failed').length
   const filteredHighlights = highlights?.filter((h) => categoryFilter === 'all' || h.category.type === categoryFilter)
 
   const handleExport = async (format: 'pdf' | 'docx') => {
@@ -49,7 +51,7 @@ export default function JobDetailPage() {
     <div>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-slate-900">{job.title || 'Revue sans titre'}</h1>
+          <h1 className="page-title">{job.title || 'Revue sans titre'}</h1>
           <p className="mt-1 text-sm text-slate-500">{job.documents.length} document(s) source</p>
         </div>
         <JobStatusBadge status={job.status} />
@@ -75,12 +77,23 @@ export default function JobDetailPage() {
             <p className="mt-1 text-right text-xs text-slate-500">{job.progress_percent}%</p>
           </div>
           <ProgressStepper steps={job.step_runs} />
+          <p className="mt-5 rounded-md bg-slate-50 p-3 text-xs text-slate-600">
+            L&apos;analyse s&apos;exécute en arrière-plan sur nos serveurs : vous pouvez quitter cette page ou
+            fermer l&apos;onglet. La revue apparaîtra dans « Revues de presse » dès qu&apos;elle sera prête.
+          </p>
         </div>
       ) : (
         <div className="mt-6 space-y-6">
+          {skippedCount > 0 && (
+            <div className="card border-amber-200 bg-amber-50 text-sm text-amber-900">
+              {skippedCount} fichier{skippedCount > 1 ? 's' : ''} n&apos;{skippedCount > 1 ? 'ont' : 'a'} pas pu être
+              lu{skippedCount > 1 ? 's' : ''} et ne figure{skippedCount > 1 ? 'nt' : ''} donc pas dans la revue
+              (voir la liste des documents ci-dessous).
+            </div>
+          )}
           <div className="card">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold text-slate-900">Revue générée</h2>
+              <h2 className="section-title">Revue générée</h2>
               <div className="flex gap-2">
                 <button type="button" className="btn-secondary" onClick={() => void handleExport('pdf')}>
                   Exporter en PDF
@@ -97,7 +110,7 @@ export default function JobDetailPage() {
           </div>
 
           <div className="card">
-            <h2 className="text-sm font-semibold text-slate-900">Points saillants détectés</h2>
+            <h2 className="section-title">Points saillants détectés</h2>
             <div className="mt-3 flex flex-wrap gap-2">
               {CATEGORY_FILTERS.map((filter) => (
                 <button
@@ -138,6 +151,17 @@ export default function JobDetailPage() {
                 </li>
               ))}
             </ul>
+          </div>
+        </div>
+      )}
+
+      {job.documents.length > 0 && (
+        <div className="card mt-6">
+          <h2 className="section-title">
+            Documents ({job.documents.length}) — lus dans l&apos;ordre de téléversement
+          </h2>
+          <div className="mt-2">
+            <DocumentsList documents={job.documents} />
           </div>
         </div>
       )}
