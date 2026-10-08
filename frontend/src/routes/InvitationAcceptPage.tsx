@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery } from '@tanstack/react-query'
+import clsx from 'clsx'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -7,6 +8,10 @@ import { z } from 'zod'
 import { apiClient, extractErrorMessage, setAccessToken } from '../api/client'
 import type { Membership, User } from '../api/types'
 import { useAuth } from '../auth/useAuth'
+import { AuthShell } from '../components/AuthShell'
+import { ArrowRightIcon, MailIcon, UsersIcon } from '../components/icons'
+import { PasswordInput } from '../components/PasswordInput'
+import { Alert, FullPageLoader, Spinner } from '../components/ui'
 
 interface InvitationPreview {
   email: string
@@ -14,8 +19,10 @@ interface InvitationPreview {
   organization_name: string
 }
 
+const ROLE_LABELS: Record<string, string> = { owner: 'propriétaire', admin: 'administrateur', member: 'membre' }
+
 const registerSchema = z.object({
-  full_name: z.string().min(2, 'Votre nom est requis.'),
+  full_name: z.string().trim().min(2, 'Votre nom est requis.'),
   password: z.string().min(10, 'Au moins 10 caractères.'),
 })
 
@@ -46,7 +53,7 @@ export default function InvitationAcceptPage() {
       await refreshOrganization()
       navigate('/dashboard', { replace: true })
     },
-    onError: (error) => setActionError(extractErrorMessage(error, "Impossible d'accepter cette invitation.")),
+    onError: (error) => setActionError(extractErrorMessage(error, 'Impossible d’accepter cette invitation.')),
   })
 
   const registerMutation = useMutation({
@@ -67,98 +74,124 @@ export default function InvitationAcceptPage() {
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<RegisterFormValues>({ resolver: zodResolver(registerSchema) })
 
   if (isLoading || previewQuery.isLoading) {
-    return <div className="flex min-h-screen items-center justify-center text-slate-500">Chargement…</div>
+    return <FullPageLoader />
   }
 
   if (previewQuery.isError || !previewQuery.data) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-        <div className="card max-w-sm text-center">
-          <h1 className="text-lg font-semibold text-slate-900">Invitation introuvable</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Ce lien d&apos;invitation est invalide, expiré, ou a déjà été utilisé.
-          </p>
-          <Link to="/login" className="btn-primary mt-4 inline-flex">
-            Se connecter
-          </Link>
-        </div>
-      </div>
+      <AuthShell
+        title="Invitation introuvable"
+        subtitle="Ce lien d’invitation est invalide, a expiré (7 jours) ou a déjà été utilisé. Demandez un nouveau lien à l’administrateur de votre organisation."
+      >
+        <Link to="/login" className="btn-primary btn-lg w-full">
+          Se connecter
+        </Link>
+      </AuthShell>
     )
   }
 
   const preview = previewQuery.data
+  const roleLabel = ROLE_LABELS[preview.role] ?? preview.role
+  const badge = (
+    <span className="chip bg-brand-50 py-1 text-brand-700 ring-1 ring-brand-200">
+      <UsersIcon className="h-3.5 w-3.5" />
+      Invitation en tant que {roleLabel}
+    </span>
+  )
 
   if (user) {
     const emailMatches = user.email.toLowerCase() === preview.email.toLowerCase()
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
-        <div className="card max-w-sm text-center">
-          <h1 className="text-lg font-semibold text-slate-900">Rejoindre {preview.organization_name}</h1>
-          {emailMatches ? (
-            <>
-              <p className="mt-2 text-sm text-slate-600">Connecté en tant que {user.email}.</p>
-              {actionError && <p className="mt-2 text-sm text-red-600">{actionError}</p>}
-              <button
-                type="button"
-                className="btn-primary mt-4"
-                disabled={acceptMutation.isPending}
-                onClick={() => acceptMutation.mutate()}
-              >
-                {acceptMutation.isPending ? 'Validation…' : "Accepter l'invitation"}
-              </button>
-            </>
-          ) : (
-            <p className="mt-2 text-sm text-red-600">
-              Cette invitation a été envoyée à {preview.email}, mais vous êtes connecté en tant que {user.email}.
-              Déconnectez-vous puis réessayez avec le bon compte.
-            </p>
-          )}
-        </div>
-      </div>
+      <AuthShell title={`Rejoindre ${preview.organization_name}`} subtitle={`Connecté en tant que ${user.email}.`} badge={badge}>
+        {emailMatches ? (
+          <div className="space-y-4">
+            {actionError && <Alert tone="danger">{actionError}</Alert>}
+            <button
+              type="button"
+              className="btn-primary btn-lg w-full"
+              disabled={acceptMutation.isPending}
+              onClick={() => acceptMutation.mutate()}
+            >
+              {acceptMutation.isPending ? <Spinner /> : null}
+              {acceptMutation.isPending ? 'Validation…' : 'Accepter l’invitation'}
+            </button>
+          </div>
+        ) : (
+          <Alert tone="warning" title="Ce n’est pas le bon compte">
+            Cette invitation a été envoyée à <strong>{preview.email}</strong>. Déconnectez-vous puis reconnectez-vous
+            avec ce compte.
+          </Alert>
+        )}
+      </AuthShell>
     )
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10">
-      <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-lg font-semibold text-slate-900">Rejoindre {preview.organization_name}</h1>
-        <p className="mt-1 text-sm text-slate-500">Invitation envoyée à {preview.email}.</p>
-
-        <form
-          className="mt-6 space-y-4"
-          onSubmit={(e) => void handleSubmit((values) => registerMutation.mutate(values))(e)}
-        >
-          <div>
-            <label className="label">Votre nom complet</label>
-            <input className="input" {...register('full_name')} />
-            {errors.full_name && <p className="mt-1 text-xs text-red-600">{errors.full_name.message}</p>}
-          </div>
-          <div>
-            <label className="label">Choisissez un mot de passe</label>
-            <input type="password" autoComplete="new-password" className="input" {...register('password')} />
-            {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password.message}</p>}
-          </div>
-          {actionError && <p className="text-sm text-red-600">{actionError}</p>}
-          <button type="submit" disabled={isSubmitting || registerMutation.isPending} className="btn-primary w-full">
-            {registerMutation.isPending ? 'Création…' : 'Créer mon compte et rejoindre'}
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-slate-500">
+    <AuthShell
+      title={`Rejoindre ${preview.organization_name}`}
+      subtitle={
+        <span className="inline-flex items-center gap-1.5">
+          <MailIcon className="h-4 w-4" /> Invitation envoyée à {preview.email}
+        </span>
+      }
+      badge={badge}
+      footer={
+        <>
           Vous avez déjà un compte ?{' '}
           <Link
             to="/login"
             state={{ from: { pathname: `/invitations/${token}/accept` } }}
-            className="font-medium text-brand-600 hover:text-brand-700"
+            className="font-semibold text-brand-600 hover:text-brand-700"
           >
             Se connecter
           </Link>
-        </p>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <form
+        className="space-y-4"
+        noValidate
+        onSubmit={(e) => void handleSubmit((values) => registerMutation.mutate(values))(e)}
+      >
+        <div>
+          <label className="label" htmlFor="inv-name">
+            Votre nom complet
+          </label>
+          <input
+            id="inv-name"
+            autoComplete="name"
+            className={clsx('input', errors.full_name && 'input-error')}
+            {...register('full_name')}
+          />
+          {errors.full_name && <p className="field-error">{errors.full_name.message}</p>}
+        </div>
+        <div>
+          <label className="label" htmlFor="inv-password">
+            Choisissez un mot de passe
+          </label>
+          <PasswordInput
+            id="inv-password"
+            autoComplete="new-password"
+            invalid={Boolean(errors.password)}
+            {...register('password')}
+          />
+          {errors.password ? (
+            <p className="field-error">{errors.password.message}</p>
+          ) : (
+            <p className="field-hint">10 caractères minimum.</p>
+          )}
+        </div>
+        {actionError && <Alert tone="danger">{actionError}</Alert>}
+        <button type="submit" disabled={registerMutation.isPending} className="btn-primary btn-lg w-full">
+          {registerMutation.isPending ? <Spinner /> : null}
+          {registerMutation.isPending ? 'Création…' : 'Créer mon compte et rejoindre'}
+          {!registerMutation.isPending && <ArrowRightIcon className="h-4 w-4" />}
+        </button>
+      </form>
+    </AuthShell>
   )
 }

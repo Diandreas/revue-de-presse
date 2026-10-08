@@ -53,7 +53,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     )
     setAccessToken(res.data.access)
     setUser(res.data.user)
-    setOrganization(res.data.organization)
+    // Le créateur de l'entreprise en est par définition le propriétaire.
+    setOrganization({ ...res.data.organization, my_role: 'owner' })
   }
 
   const logout = async () => {

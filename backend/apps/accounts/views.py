@@ -102,7 +102,10 @@ class CookieTokenRefreshView(APIView):
     def post(self, request):
         refresh_token = request.COOKIES.get(settings.REFRESH_TOKEN_COOKIE_NAME)
         if not refresh_token:
-            raise NotFound("Refresh token manquant.")
+            # Pas de session : c'est le cas normal de tout visiteur non connecté (le frontend
+            # tente une reprise de session à chaque chargement). Une réponse 4xx s'afficherait
+            # en erreur rouge dans la console du navigateur à chaque visite.
+            return Response(status=status.HTTP_204_NO_CONTENT)
 
         serializer = TokenRefreshSerializer(data={"refresh": refresh_token})
         try:
@@ -150,8 +153,19 @@ class MeView(APIView):
 class OrganizationMeView(OrganizationContextMixin, APIView):
     permission_classes = [IsAuthenticated, IsOrgMember]
 
+    @staticmethod
+    def _with_my_role(request, data):
+        # Le rôle de l'utilisateur courant permet au frontend de masquer les actions qui lui
+        # seraient refusées (inviter, modifier les catégories, payer…) au lieu d'un 403.
+        role = (
+            Membership.objects.filter(organization=request.organization, user=request.user)
+            .values_list("role", flat=True)
+            .first()
+        )
+        return {**data, "my_role": role}
+
     def get(self, request):
-        return Response(OrganizationSerializer(request.organization).data)
+        return Response(self._with_my_role(request, OrganizationSerializer(request.organization).data))
 
     def patch(self, request):
         if not IsOrgAdmin().has_permission(request, self):
@@ -159,7 +173,7 @@ class OrganizationMeView(OrganizationContextMixin, APIView):
         serializer = OrganizationSerializer(request.organization, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serializer.data)
+        return Response(self._with_my_role(request, serializer.data))
 
 
 class OrganizationMembersView(OrganizationContextMixin, generics.ListAPIView):
@@ -196,6 +210,31 @@ class InviteView(OrganizationContextMixin, APIView):
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
         return Response(InvitationSerializer(invitation).data, status=201)
+
+
+class OrganizationInvitationsView(OrganizationContextMixin, generics.ListAPIView):
+    """Invitations en attente, avec leur lien à partager (cf. InvitationSerializer.accept_url)."""
+
+    permission_classes = [IsAuthenticated, IsOrgAdmin]
+    serializer_class = InvitationSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        return Invitation.objects.filter(
+            organization=self.request.organization, status=Invitation.Status.PENDING
+        ).order_by("-created_at")
+
+
+class OrganizationInvitationDetailView(OrganizationContextMixin, APIView):
+    permission_classes = [IsAuthenticated, IsOrgAdmin]
+
+    def delete(self, request, invitation_id):
+        updated = Invitation.objects.filter(
+            organization=request.organization, id=invitation_id, status=Invitation.Status.PENDING
+        ).update(status=Invitation.Status.REVOKED)
+        if not updated:
+            raise NotFound("Invitation introuvable ou déjà traitée.")
+        return Response(status=204)
 
 
 class InvitationDetailView(APIView):

@@ -55,9 +55,12 @@ def test_login_with_wrong_password_is_rejected(api_client):
 
 
 @pytest.mark.django_db
-def test_refresh_without_cookie_returns_404(api_client):
+def test_refresh_without_cookie_returns_204_without_token(api_client):
+    """Visiteur non connecté : pas une erreur (sinon chaque visite affiche une erreur
+    rouge dans la console), juste « aucune session à reprendre »."""
     response = api_client.post("/api/auth/token/refresh/")
-    assert response.status_code == 404
+    assert response.status_code == 204
+    assert not response.content
 
 
 @pytest.mark.django_db

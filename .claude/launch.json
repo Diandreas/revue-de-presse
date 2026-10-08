@@ -6,6 +6,38 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "local-backend",
+      "runtimeExecutable": "E:\\project\\revue-de-presse\\backend\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": ["backend/manage.py", "runserver", "127.0.0.1:8001", "--noreload"],
+      "port": 8001,
+      "url": "http://127.0.0.1:8001",
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "config.settings.dev",
+        "DATABASE_URL": "postgres://revue:revue@127.0.0.1:5432/revue_de_presse",
+        "CELERY_BROKER_URL": "filesystem://"
+      }
+    },
+    {
+      "name": "local-worker",
+      "runtimeExecutable": "E:\\project\\revue-de-presse\\backend\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": ["-m", "celery", "--workdir", "backend", "-A", "config", "worker", "-l", "info", "-P", "solo"],
+      "port": 8002,
+      "env": {
+        "DJANGO_SETTINGS_MODULE": "config.settings.dev",
+        "DATABASE_URL": "postgres://revue:revue@127.0.0.1:5432/revue_de_presse",
+        "CELERY_BROKER_URL": "filesystem://"
+      }
+    },
+    {
+      "name": "local-frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev", "--", "--port", "5174", "--strictPort"],
+      "port": 5174,
+      "env": {
+        "VITE_PROXY_TARGET": "http://127.0.0.1:8001"
+      }
     }
   ]
 }

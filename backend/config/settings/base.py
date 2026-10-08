@@ -228,6 +228,10 @@ CAMPAY_WEBHOOK_SECRET = env("CAMPAY_WEBHOOK_SECRET", default="")
 CAMPAY_BASE_URL = env("CAMPAY_BASE_URL", default="https://demo.campay.net/api")
 
 # --- Facturation / abonnement ---
+# Essai gratuit offert à la création d'une entreprise (0 = désactivé). Sans essai, un
+# nouveau compte ne peut lancer aucune revue avant qu'un paiement ait été validé.
+TRIAL_DAYS = env.int("TRIAL_DAYS", default=14)
+TRIAL_PLAN_CODE = env("TRIAL_PLAN_CODE", default="starter")
 SUBSCRIPTION_MOBILE_MONEY_GRACE_DAYS = 5
 SUBSCRIPTION_BANK_TRANSFER_GRACE_DAYS = 7
 SUBSCRIPTION_RENEWAL_REMINDER_DAYS_BEFORE = (3, 1)
@@ -239,5 +243,8 @@ LOGGING = {
     "root": {"handlers": ["console"], "level": env("DJANGO_LOG_LEVEL", default="INFO")},
     "loggers": {
         "django": {"handlers": ["console"], "level": env("DJANGO_LOG_LEVEL", default="INFO"), "propagate": False},
+        # WeasyPrint sous-échantillonne les polices via fontTools, qui journalise en INFO
+        # plusieurs centaines de lignes par export PDF.
+        "fontTools": {"level": "WARNING"},
     },
 }

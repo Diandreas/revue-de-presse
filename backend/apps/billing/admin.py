@@ -36,6 +36,6 @@ class InvoiceAdmin(admin.ModelAdmin):
             invoice.paid_at = timezone.now()
             invoice.reviewed_by = request.user
             invoice.save(update_fields=["status", "paid_at", "reviewed_by", "updated_at"])
-            SubscriptionService.renew(subscription=invoice.subscription)
+            SubscriptionService.renew(subscription=invoice.subscription, provider=invoice.provider)
             count += 1
         self.message_user(request, f"{count} facture(s) validée(s).")

@@ -72,9 +72,16 @@ class PipelineStepRunSerializer(serializers.ModelSerializer):
 
 
 class PressReviewJobListSerializer(serializers.ModelSerializer):
+    # Annotés par JobListCreateView.get_queryset (0 si le serializer est utilisé ailleurs).
+    documents_count = serializers.IntegerField(read_only=True, default=0)
+    highlights_count = serializers.IntegerField(read_only=True, default=0)
+
     class Meta:
         model = PressReviewJob
-        fields = ["id", "title", "status", "progress_percent", "created_at", "completed_at"]
+        fields = [
+            "id", "title", "status", "progress_percent", "created_at", "completed_at",
+            "documents_count", "highlights_count",
+        ]
         read_only_fields = fields
 
 

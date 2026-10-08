@@ -15,14 +15,31 @@ class PlanSerializer(serializers.ModelSerializer):
 
 class SubscriptionSerializer(serializers.ModelSerializer):
     plan = PlanSerializer(read_only=True)
+    is_trial = serializers.SerializerMethodField()
+    reviews_used = serializers.SerializerMethodField()
+    reviews_limit = serializers.IntegerField(source="plan.max_reviews_per_month", read_only=True)
+    # Formule demandée au paiement, appliquée seulement une fois le paiement confirmé.
+    pending_plan_code = serializers.SerializerMethodField()
 
     class Meta:
         model = Subscription
         fields = [
             "id", "plan", "provider", "status",
             "current_period_start", "current_period_end", "cancel_at_period_end",
+            "is_trial", "reviews_used", "reviews_limit", "pending_plan_code",
         ]
         read_only_fields = fields
+
+    def get_is_trial(self, obj):
+        return obj.status == Subscription.Status.TRIALING
+
+    def get_pending_plan_code(self, obj):
+        return (obj.metadata or {}).get("pending_plan_code")
+
+    def get_reviews_used(self, obj):
+        from .services import SubscriptionService
+
+        return SubscriptionService.reviews_used(obj)
 
 
 class InvoiceSerializer(serializers.ModelSerializer):

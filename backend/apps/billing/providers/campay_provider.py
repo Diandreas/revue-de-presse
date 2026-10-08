@@ -97,7 +97,7 @@ class CamPayProvider(SubscriptionProvider):
             invoice.status = Invoice.Status.PAID
             invoice.paid_at = timezone.now()
             invoice.save(update_fields=["status", "paid_at", "raw_payload", "updated_at"])
-            SubscriptionService.renew(subscription=invoice.subscription)
+            SubscriptionService.renew(subscription=invoice.subscription, provider=invoice.provider)
         else:
             invoice.status = Invoice.Status.FAILED
             invoice.save(update_fields=["status", "raw_payload", "updated_at"])

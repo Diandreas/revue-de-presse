@@ -5,6 +5,8 @@ export interface User {
   date_joined: string
 }
 
+export type MembershipRole = 'owner' | 'admin' | 'member'
+
 export interface Organization {
   id: string
   name: string
@@ -12,9 +14,19 @@ export interface Organization {
   country: string
   default_locale: string
   created_at: string
+  /** Rôle de l'utilisateur connecté dans cette organisation. */
+  my_role?: MembershipRole | null
 }
 
-export type MembershipRole = 'owner' | 'admin' | 'member'
+export interface Invitation {
+  id: string
+  email: string
+  role: MembershipRole
+  status: 'pending' | 'accepted' | 'revoked'
+  expires_at: string
+  created_at: string
+  accept_url: string
+}
 
 export interface Membership {
   id: string
@@ -74,7 +86,7 @@ export interface PipelineStepRun {
   finished_at: string | null
 }
 
-export interface PressReviewJobListItem {
+interface PressReviewJobBase {
   id: string
   title: string
   status: JobStatus
@@ -83,11 +95,25 @@ export interface PressReviewJobListItem {
   completed_at: string | null
 }
 
-export interface PressReviewJobDetail extends PressReviewJobListItem {
+export interface PressReviewJobListItem extends PressReviewJobBase {
+  documents_count: number
+  highlights_count: number
+}
+
+export interface PressReviewJobDetail extends PressReviewJobBase {
   error_message: string
   started_at: string | null
   step_runs: PipelineStepRun[]
   documents: SourceDocument[]
+}
+
+export interface JobStats {
+  total: number
+  active: number
+  ready: number
+  failed: number
+  highlights: number
+  documents: number
 }
 
 export interface Highlight {
@@ -129,6 +155,11 @@ export interface Subscription {
   current_period_start: string | null
   current_period_end: string | null
   cancel_at_period_end: boolean
+  is_trial: boolean
+  reviews_used: number
+  reviews_limit: number
+  /** Formule demandée lors d'un paiement, appliquée une fois le paiement confirmé. */
+  pending_plan_code: string | null
 }
 
 export interface Invoice {

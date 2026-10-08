@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiClient } from '../../api/client'
-import type { Membership, MembershipRole, Organization, Paginated } from '../../api/types'
+import type { Invitation, Membership, MembershipRole, Organization, Paginated } from '../../api/types'
 
 export function useMembers() {
   return useQuery({
@@ -12,14 +12,38 @@ export function useMembers() {
   })
 }
 
+export function useInvitations(enabled: boolean) {
+  return useQuery({
+    queryKey: ['invitations'],
+    queryFn: async () => {
+      const res = await apiClient.get<Invitation[]>('/organizations/me/invitations/')
+      return res.data
+    },
+    enabled,
+  })
+}
+
 export function useInviteMember() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (input: { email: string; role: MembershipRole }) => {
-      const res = await apiClient.post('/organizations/me/invite/', input)
+      const res = await apiClient.post<Invitation>('/organizations/me/invite/', input)
       return res.data
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['members'] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['members'] })
+      void queryClient.invalidateQueries({ queryKey: ['invitations'] })
+    },
+  })
+}
+
+export function useRevokeInvitation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (invitationId: string) => {
+      await apiClient.delete(`/organizations/me/invitations/${invitationId}/`)
+    },
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['invitations'] }),
   })
 }
 

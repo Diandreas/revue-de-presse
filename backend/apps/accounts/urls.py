@@ -9,6 +9,8 @@ from .views import (
     InviteView,
     LogoutView,
     MeView,
+    OrganizationInvitationDetailView,
+    OrganizationInvitationsView,
     OrganizationMeView,
     OrganizationMemberDetailView,
     OrganizationMembersView,
@@ -32,4 +34,10 @@ urlpatterns = [
         name="organization-member-detail",
     ),
     path("organizations/me/invite/", InviteView.as_view(), name="organization-invite"),
+    path("organizations/me/invitations/", OrganizationInvitationsView.as_view(), name="organization-invitations"),
+    path(
+        "organizations/me/invitations/<uuid:invitation_id>/",
+        OrganizationInvitationDetailView.as_view(),
+        name="organization-invitation-detail",
+    ),
 ]

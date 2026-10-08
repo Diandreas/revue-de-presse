@@ -3,11 +3,11 @@ import clsx from 'clsx'
 type Tone = 'slate' | 'brand' | 'amber' | 'green' | 'red'
 
 const TONE_CLASSES: Record<Tone, string> = {
-  slate: 'bg-slate-100 text-slate-600',
-  brand: 'bg-brand-50 text-brand-700',
-  amber: 'bg-amber-50 text-amber-700',
-  green: 'bg-emerald-50 text-emerald-700',
-  red: 'bg-red-50 text-red-700',
+  slate: 'bg-slate-100 text-slate-600 ring-slate-200',
+  brand: 'bg-brand-50 text-brand-700 ring-brand-200/70',
+  amber: 'bg-amber-50 text-amber-800 ring-amber-200/70',
+  green: 'bg-emerald-50 text-emerald-700 ring-emerald-200/70',
+  red: 'bg-red-50 text-red-700 ring-red-200/70',
 }
 
 const DOT_CLASSES: Record<Tone, string> = {
@@ -19,10 +19,10 @@ const DOT_CLASSES: Record<Tone, string> = {
 }
 
 const JOB_STATUS_LABELS: Record<string, { label: string; tone: Tone; pulse?: boolean }> = {
-  UPLOADED: { label: 'Téléversé', tone: 'slate' },
-  TEXT_EXTRACTION: { label: 'Extraction du texte', tone: 'brand', pulse: true },
-  CHUNKING_SUMMARIZATION: { label: 'Découpage & résumé', tone: 'brand', pulse: true },
-  HIGHLIGHT_DETECTION: { label: 'Détection des points saillants', tone: 'brand', pulse: true },
+  UPLOADED: { label: 'En file d’attente', tone: 'slate', pulse: true },
+  TEXT_EXTRACTION: { label: 'Lecture des documents', tone: 'brand', pulse: true },
+  CHUNKING_SUMMARIZATION: { label: 'Résumé des articles', tone: 'brand', pulse: true },
+  HIGHLIGHT_DETECTION: { label: 'Détection des points clés', tone: 'brand', pulse: true },
   REVIEW_DRAFTING: { label: 'Rédaction de la revue', tone: 'brand', pulse: true },
   REVIEW_READY: { label: 'Revue prête', tone: 'green' },
   EXPORTED: { label: 'Exportée', tone: 'green' },
@@ -30,33 +30,36 @@ const JOB_STATUS_LABELS: Record<string, { label: string; tone: Tone; pulse?: boo
 }
 
 const SUBSCRIPTION_STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
-  trialing: { label: 'Essai', tone: 'brand' },
+  trialing: { label: 'Essai gratuit', tone: 'brand' },
   active: { label: 'Active', tone: 'green' },
-  past_due: { label: 'En retard', tone: 'amber' },
+  past_due: { label: 'Paiement en retard', tone: 'amber' },
   canceled: { label: 'Annulée', tone: 'red' },
-  incomplete: { label: 'Incomplète', tone: 'slate' },
+  incomplete: { label: 'En attente de paiement', tone: 'amber' },
 }
 
 const INVOICE_STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
-  pending: { label: 'En attente', tone: 'amber' },
-  pending_review: { label: 'Justificatif à valider', tone: 'amber' },
+  pending: { label: 'À régler', tone: 'amber' },
+  pending_review: { label: 'Justificatif en vérification', tone: 'brand' },
   paid: { label: 'Payée', tone: 'green' },
   failed: { label: 'Échouée', tone: 'red' },
   refunded: { label: 'Remboursée', tone: 'slate' },
 }
 
-function Badge({ label, tone, pulse }: { label: string; tone: Tone; pulse?: boolean }) {
+export function Badge({ label, tone, pulse, className }: { label: string; tone: Tone; pulse?: boolean; className?: string }) {
   return (
-    <span className={clsx('chip', TONE_CLASSES[tone])}>
-      <span className={clsx('h-1.5 w-1.5 rounded-full', DOT_CLASSES[tone], pulse && 'animate-pulse')} />
+    <span className={clsx('chip ring-1 ring-inset', TONE_CLASSES[tone], className)}>
+      <span className="relative flex h-1.5 w-1.5">
+        {pulse && <span className={clsx('absolute inline-flex h-full w-full animate-ping rounded-full opacity-60', DOT_CLASSES[tone])} />}
+        <span className={clsx('relative inline-flex h-1.5 w-1.5 rounded-full', DOT_CLASSES[tone])} />
+      </span>
       {label}
     </span>
   )
 }
 
-export function JobStatusBadge({ status }: { status: string }) {
+export function JobStatusBadge({ status, className }: { status: string; className?: string }) {
   const entry = JOB_STATUS_LABELS[status] ?? { label: status, tone: 'slate' as Tone }
-  return <Badge label={entry.label} tone={entry.tone} pulse={entry.pulse} />
+  return <Badge label={entry.label} tone={entry.tone} pulse={entry.pulse} className={className} />
 }
 
 export function SubscriptionStatusBadge({ status }: { status: string }) {

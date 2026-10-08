@@ -100,11 +100,17 @@ class SourceDocument(TimeStampedModel):
         blank=True,
         help_text="Raison lisible si l'extraction a échoué (photo illisible, aucun texte détecté…).",
     )
+    position = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Rang choisi par l'utilisateur au lancement de la revue (ordre de lecture).",
+    )
 
     class Meta:
-        # Ordre d'upload : c'est l'ordre dans lequel les documents sont analysés puis
-        # présentés dans la revue (l'ordre inverse mettait la dernière photo en premier).
-        ordering = ["created_at", "id"]
+        # Ordre de lecture : celui choisi par l'utilisateur (`position`, fixé à la création de
+        # la revue) — les envois en parallèle ne se terminent pas dans l'ordre de sélection —
+        # puis l'ordre d'upload pour les revues antérieures à ce champ (position vide).
+        ordering = [models.F("position").asc(nulls_last=True), "created_at", "id"]
 
     def __str__(self):
         return self.original_filename

@@ -1,5 +1,10 @@
 import { createContext, useContext } from 'react'
-import type { Organization, User } from '../api/types'
+import type { MembershipRole, Organization, User } from '../api/types'
+
+/** Owner ou admin : peut inviter, gérer les catégories, payer… (mêmes règles que IsOrgAdmin). */
+export function isAdminRole(role: MembershipRole | null | undefined) {
+  return role === 'owner' || role === 'admin'
+}
 
 export interface RegisterInput {
   email: string

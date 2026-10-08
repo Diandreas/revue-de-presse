@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import clsx from 'clsx'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link, useNavigate } from 'react-router-dom'
@@ -6,11 +7,14 @@ import { z } from 'zod'
 import { extractErrorMessage } from '../api/client'
 import { useAuth } from '../auth/useAuth'
 import { AuthShell } from '../components/AuthShell'
+import { ArrowRightIcon, GiftIcon } from '../components/icons'
+import { PasswordInput } from '../components/PasswordInput'
+import { Alert, Spinner } from '../components/ui'
 
 const schema = z.object({
-  organization_name: z.string().min(2, "Le nom de l'entreprise est requis."),
-  full_name: z.string().min(2, 'Votre nom est requis.'),
-  email: z.string().email('Adresse email invalide.'),
+  organization_name: z.string().trim().min(2, 'Le nom de l’entreprise est requis.'),
+  full_name: z.string().trim().min(2, 'Votre nom est requis.'),
+  email: z.string().trim().email('Adresse email invalide.'),
   password: z.string().min(10, 'Au moins 10 caractères.'),
 })
 
@@ -39,45 +43,85 @@ export default function RegisterPage() {
 
   return (
     <AuthShell
-      title="Créer votre entreprise"
-      subtitle="Vous devenez propriétaire de l'organisation et pourrez inviter votre équipe ensuite."
+      title="Créez l’espace de votre entreprise"
+      subtitle="Vous en devenez le propriétaire et pourrez inviter votre équipe ensuite."
+      badge={
+        <span className="chip bg-amber-50 py-1 text-amber-800 ring-1 ring-amber-200">
+          <GiftIcon className="h-3.5 w-3.5" />
+          14 jours d’essai gratuit · sans carte bancaire
+        </span>
+      }
       footer={
         <>
           Déjà inscrit ?{' '}
-          <Link to="/login" className="font-medium text-brand-600 hover:text-brand-700">
+          <Link to="/login" className="font-semibold text-brand-600 hover:text-brand-700">
             Se connecter
           </Link>
         </>
       }
     >
-      <form className="space-y-4" onSubmit={(e) => void handleSubmit(onSubmit)(e)}>
+      <form className="space-y-4" noValidate onSubmit={(e) => void handleSubmit(onSubmit)(e)}>
         <div>
-          <label className="label">Nom de l&apos;entreprise</label>
-          <input className="input" {...register('organization_name')} />
-          {errors.organization_name && (
-            <p className="mt-1 text-xs text-red-600">{errors.organization_name.message}</p>
+          <label className="label" htmlFor="reg-org">
+            Nom de l’entreprise
+          </label>
+          <input
+            id="reg-org"
+            autoComplete="organization"
+            placeholder="Ex : Cabinet Ndjock & Associés"
+            className={clsx('input', errors.organization_name && 'input-error')}
+            {...register('organization_name')}
+          />
+          {errors.organization_name && <p className="field-error">{errors.organization_name.message}</p>}
+        </div>
+        <div>
+          <label className="label" htmlFor="reg-name">
+            Votre nom complet
+          </label>
+          <input
+            id="reg-name"
+            autoComplete="name"
+            className={clsx('input', errors.full_name && 'input-error')}
+            {...register('full_name')}
+          />
+          {errors.full_name && <p className="field-error">{errors.full_name.message}</p>}
+        </div>
+        <div>
+          <label className="label" htmlFor="reg-email">
+            Email professionnel
+          </label>
+          <input
+            id="reg-email"
+            type="email"
+            autoComplete="email"
+            inputMode="email"
+            placeholder="vous@entreprise.cm"
+            className={clsx('input', errors.email && 'input-error')}
+            {...register('email')}
+          />
+          {errors.email && <p className="field-error">{errors.email.message}</p>}
+        </div>
+        <div>
+          <label className="label" htmlFor="reg-password">
+            Mot de passe
+          </label>
+          <PasswordInput
+            id="reg-password"
+            autoComplete="new-password"
+            invalid={Boolean(errors.password)}
+            {...register('password')}
+          />
+          {errors.password ? (
+            <p className="field-error">{errors.password.message}</p>
+          ) : (
+            <p className="field-hint">10 caractères minimum.</p>
           )}
         </div>
-        <div>
-          <label className="label">Votre nom complet</label>
-          <input className="input" {...register('full_name')} />
-          {errors.full_name && <p className="mt-1 text-xs text-red-600">{errors.full_name.message}</p>}
-        </div>
-        <div>
-          <label className="label">Email professionnel</label>
-          <input type="email" autoComplete="email" className="input" {...register('email')} />
-          {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>}
-        </div>
-        <div>
-          <label className="label">Mot de passe</label>
-          <input type="password" autoComplete="new-password" className="input" {...register('password')} />
-          {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password.message}</p>}
-        </div>
-        {serverError && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{serverError}</p>
-        )}
-        <button type="submit" disabled={isSubmitting} className="btn-primary w-full">
-          {isSubmitting ? 'Création…' : 'Créer mon compte'}
+        {serverError && <Alert tone="danger">{serverError}</Alert>}
+        <button type="submit" disabled={isSubmitting} className="btn-primary btn-lg w-full">
+          {isSubmitting ? <Spinner /> : null}
+          {isSubmitting ? 'Création de votre espace…' : 'Démarrer mon essai gratuit'}
+          {!isSubmitting && <ArrowRightIcon className="h-4 w-4" />}
         </button>
       </form>
     </AuthShell>

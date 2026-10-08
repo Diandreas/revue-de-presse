@@ -29,9 +29,10 @@ apiClient.interceptors.request.use((config) => {
 export async function refreshAccessToken(): Promise<string | null> {
   if (!refreshPromise) {
     refreshPromise = apiClient
-      .post<{ access: string }>('/auth/token/refresh/')
+      .post<{ access?: string } | ''>('/auth/token/refresh/')
       .then((res) => {
-        accessToken = res.data.access
+        // 204 sans corps = aucune session à reprendre (visiteur non connecté).
+        accessToken = (res.data && typeof res.data === 'object' && res.data.access) || null
         return accessToken
       })
       .catch(() => {
@@ -66,9 +67,34 @@ apiClient.interceptors.response.use(
   },
 )
 
+/** Premier message lisible d'une erreur de validation DRF ({champ: ["msg"]} ou ["msg"]). */
+function firstValidationMessage(value: unknown): string | null {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = firstValidationMessage(item)
+      if (message) return message
+    }
+  } else if (value && typeof value === 'object') {
+    for (const item of Object.values(value)) {
+      const message = firstValidationMessage(item)
+      if (message) return message
+    }
+  }
+  return null
+}
+
 export function extractErrorMessage(error: unknown, fallback = 'Une erreur est survenue.'): string {
   if (axios.isAxiosError(error)) {
-    const data = error.response?.data as ApiErrorBody | undefined
+    if (!error.response) {
+      return 'Connexion impossible au serveur. Vérifiez votre connexion internet puis réessayez.'
+    }
+    if (error.response.status === 413) return 'Fichier trop volumineux (30 Mo maximum).'
+    const data = error.response.data as ApiErrorBody | undefined
+    // Erreurs par champ : le message précis (« Adresse email invalide ») plutôt que le
+    // générique « Une erreur de validation est survenue ».
+    const validation = data?.errors ? firstValidationMessage(data.errors) : null
+    if (validation) return validation
     if (data?.detail) return data.detail
   }
   return fallback

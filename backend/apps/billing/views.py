@@ -63,10 +63,7 @@ def _get_or_create_subscription(organization, plan, provider):
     subscription = getattr(organization, "subscription", None)
     if subscription is None:
         return SubscriptionService.start_subscription(organization=organization, plan=plan, provider=provider)
-    subscription.plan = plan
-    subscription.provider = provider
-    subscription.save(update_fields=["plan", "provider", "updated_at"])
-    return subscription
+    return SubscriptionService.request_plan_change(subscription=subscription, plan=plan, provider=provider)
 
 
 class CheckoutStripeView(OrganizationContextMixin, APIView):
@@ -76,11 +73,13 @@ class CheckoutStripeView(OrganizationContextMixin, APIView):
         serializer = CheckoutStripeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         plan = _get_plan(serializer.validated_data["plan_code"])
+        provider = get_provider("stripe")
+        if not provider.enabled:
+            # Prestataire non configuré : réponse explicative, sans toucher à l'abonnement.
+            return Response(provider.create_checkout(organization=request.organization, plan=plan, subscription=None))
         subscription = _get_or_create_subscription(request.organization, plan, Subscription.Provider.STRIPE)
         try:
-            result = get_provider("stripe").create_checkout(
-                organization=request.organization, plan=plan, subscription=subscription
-            )
+            result = provider.create_checkout(organization=request.organization, plan=plan, subscription=subscription)
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
         return Response(result)
@@ -93,11 +92,14 @@ class CheckoutMobileMoneyView(OrganizationContextMixin, APIView):
         serializer = CheckoutMobileMoneySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         plan = _get_plan(serializer.validated_data["plan_code"])
+        provider = get_provider("mobile_money")
+        if not provider.enabled:
+            return Response(provider.create_checkout(organization=request.organization, plan=plan, subscription=None))
         subscription = _get_or_create_subscription(request.organization, plan, Subscription.Provider.MOBILE_MONEY)
         subscription.metadata = {**(subscription.metadata or {}), "phone_number": serializer.validated_data["phone_number"]}
         subscription.save(update_fields=["metadata", "updated_at"])
         try:
-            result = get_provider("mobile_money").create_checkout(
+            result = provider.create_checkout(
                 organization=request.organization,
                 plan=plan,
                 subscription=subscription,
@@ -166,7 +168,7 @@ class InvoiceReviewView(APIView):
             invoice.status = Invoice.Status.PAID
             invoice.paid_at = timezone.now()
             invoice.save(update_fields=["status", "paid_at", "reviewed_by", "updated_at"])
-            SubscriptionService.renew(subscription=invoice.subscription)
+            SubscriptionService.renew(subscription=invoice.subscription, provider=invoice.provider)
         else:
             invoice.status = Invoice.Status.FAILED
             invoice.save(update_fields=["status", "reviewed_by", "updated_at"])

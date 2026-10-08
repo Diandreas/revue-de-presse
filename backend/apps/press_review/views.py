@@ -1,6 +1,6 @@
 import logging
 
-from django.db.models import ProtectedError, Q
+from django.db.models import Count, ProtectedError, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
@@ -115,7 +115,24 @@ class SourceDocumentListCreateView(OrganizationContextMixin, generics.ListCreate
             original_filename=f.name,
             kind=classify_upload_kind(f),
         )
-        return Response(SourceDocumentSerializer(document).data, status=status.HTTP_201_CREATED)
+        return Response(
+            SourceDocumentSerializer(document, context=self.get_serializer_context()).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class SourceDocumentDetailView(OrganizationContextMixin, generics.DestroyAPIView):
+    """Retire un document téléversé par erreur, tant qu'il n'a pas été rattaché à une revue
+    (un document déjà analysé fait partie de l'historique de sa revue : on n'y touche pas)."""
+
+    permission_classes = [IsAuthenticated, IsOrgMember]
+
+    def get_queryset(self):
+        return SourceDocument.objects.filter(organization=self.request.organization, job__isnull=True)
+
+    def perform_destroy(self, instance):
+        instance.file.delete(save=False)
+        instance.delete()
 
 
 class JobListCreateView(OrganizationContextMixin, generics.ListCreateAPIView):
@@ -124,7 +141,16 @@ class JobListCreateView(OrganizationContextMixin, generics.ListCreateAPIView):
     serializer_class = PressReviewJobListSerializer
 
     def get_queryset(self):
-        qs = PressReviewJob.objects.filter(organization=self.request.organization)
+        # order_by explicite : Django n'applique pas Meta.ordering aux requêtes GROUP BY
+        # (annotate + Count), la pagination serait alors instable.
+        qs = (
+            PressReviewJob.objects.filter(organization=self.request.organization)
+            .annotate(
+                documents_count=Count("documents", distinct=True),
+                highlights_count=Count("highlights", distinct=True),
+            )
+            .order_by("-created_at")
+        )
         status_param = self.request.query_params.get("status")
         if status_param:
             qs = qs.filter(status=status_param)
@@ -133,11 +159,9 @@ class JobListCreateView(OrganizationContextMixin, generics.ListCreateAPIView):
     def create(self, request, *args, **kwargs):
         from apps.billing.services import SubscriptionService
 
-        if not SubscriptionService.has_quota_for_new_review(organization=request.organization):
-            raise PermissionDenied(
-                "Aucun abonnement actif ou quota de revues atteint pour cette période. "
-                "Vérifiez votre abonnement dans les paramètres de facturation."
-            )
+        denial = SubscriptionService.review_quota_denial(organization=request.organization)
+        if denial:
+            raise PermissionDenied(denial)
 
         serializer = JobCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -159,6 +183,37 @@ class JobListCreateView(OrganizationContextMixin, generics.ListCreateAPIView):
         # encore pu s'exécuter).
         job.refresh_from_db()
         return Response(PressReviewJobDetailSerializer(job).data, status=status.HTTP_201_CREATED)
+
+
+ACTIVE_JOB_STATUSES = (
+    PressReviewJob.Status.UPLOADED,
+    PressReviewJob.Status.TEXT_EXTRACTION,
+    PressReviewJob.Status.CHUNKING_SUMMARIZATION,
+    PressReviewJob.Status.HIGHLIGHT_DETECTION,
+    PressReviewJob.Status.REVIEW_DRAFTING,
+)
+
+
+class JobStatsView(OrganizationContextMixin, APIView):
+    """Chiffres du tableau de bord, calculés sur TOUTES les revues de l'organisation (la
+    liste des revues est paginée : la compter côté navigateur sous-estimerait)."""
+
+    permission_classes = [IsAuthenticated, IsOrgMember]
+
+    def get(self, request):
+        stats = PressReviewJob.objects.filter(organization=request.organization).aggregate(
+            total=Count("id"),
+            active=Count("id", filter=Q(status__in=ACTIVE_JOB_STATUSES)),
+            ready=Count(
+                "id", filter=Q(status__in=[PressReviewJob.Status.REVIEW_READY, PressReviewJob.Status.EXPORTED])
+            ),
+            failed=Count("id", filter=Q(status=PressReviewJob.Status.FAILED)),
+        )
+        stats["highlights"] = Highlight.objects.filter(job__organization=request.organization).count()
+        stats["documents"] = SourceDocument.objects.filter(
+            organization=request.organization, job__isnull=False
+        ).count()
+        return Response(stats)
 
 
 class JobDetailView(OrganizationContextMixin, generics.RetrieveAPIView):

@@ -60,8 +60,9 @@ def run_press_review_pipeline(job_id):
 
 
 def _ordered_documents(job):
-    """Documents dans l'ordre d'upload : c'est aussi l'ordre de lecture de la revue."""
-    return list(job.documents.order_by("created_at", "id"))
+    """Documents dans l'ordre de lecture de la revue (cf. SourceDocument.Meta.ordering :
+    rang choisi par l'utilisateur, puis ordre d'upload)."""
+    return list(job.documents.all())
 
 
 def _fail_job(job, step_name, exc, *, retried=False):

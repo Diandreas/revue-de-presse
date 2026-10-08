@@ -87,6 +87,7 @@ class StripeProvider(SubscriptionProvider):
             subscription=subscription,
             provider_customer_id=data.get("customer", "") or "",
             provider_subscription_id=data.get("subscription", "") or "",
+            provider=Subscription.Provider.STRIPE,
         )
 
     def _handle_invoice_paid(self, data):
@@ -96,7 +97,7 @@ class StripeProvider(SubscriptionProvider):
         if subscription is None:
             logger.warning("invoice.paid Stripe sans abonnement correspondant : %s", data.get("subscription"))
             return
-        SubscriptionService.renew(subscription=subscription)
+        SubscriptionService.renew(subscription=subscription, provider=Subscription.Provider.STRIPE)
         currency = data.get("currency") or "xaf"
         Invoice.objects.update_or_create(
             provider=Subscription.Provider.STRIPE,

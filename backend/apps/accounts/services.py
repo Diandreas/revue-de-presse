@@ -33,9 +33,14 @@ def _send_invitation_email(invitation):
 def register_organization_owner(*, email, password, full_name, organization_name):
     """Crée le premier utilisateur d'une entreprise cliente + son organisation, et le
     place owner. C'est le seul chemin qui crée une Organization sans invitation."""
+    # Import tardif : billing dépend des modèles de accounts.
+    from apps.billing.services import SubscriptionService
+
     user = User.objects.create_user(email=email, password=password, full_name=full_name)
     organization = Organization.objects.create(name=organization_name, created_by=user)
     membership = Membership.objects.create(organization=organization, user=user, role=Membership.Role.OWNER)
+    # Essai gratuit : la nouvelle entreprise peut lancer ses premières revues tout de suite.
+    SubscriptionService.start_trial(organization=organization)
     return user, organization, membership
 
 

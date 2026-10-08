@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
@@ -41,10 +42,18 @@ class OrganizationSerializer(serializers.ModelSerializer):
 
 
 class InvitationSerializer(serializers.ModelSerializer):
+    # Lien à transmettre à la personne invitée (WhatsApp, email…) : l'envoi automatique
+    # d'email dépend d'un serveur SMTP qui peut ne pas être configuré. Uniquement exposé
+    # aux owners/admins (vues d'invitation protégées par IsOrgAdmin).
+    accept_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Invitation
-        fields = ["id", "email", "role", "status", "expires_at", "created_at"]
-        read_only_fields = ["id", "status", "expires_at", "created_at"]
+        fields = ["id", "email", "role", "status", "expires_at", "created_at", "accept_url"]
+        read_only_fields = ["id", "status", "expires_at", "created_at", "accept_url"]
+
+    def get_accept_url(self, obj):
+        return f"{settings.FRONTEND_BASE_URL.rstrip('/')}/invitations/{obj.token}/accept"
 
 
 class InviteCreateSerializer(serializers.Serializer):
