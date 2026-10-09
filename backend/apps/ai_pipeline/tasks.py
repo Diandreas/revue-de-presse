@@ -15,6 +15,7 @@ l'utilisateur ait à cliquer sur « Réessayer »."""
 import logging
 
 from celery import chain, shared_task
+from pydantic import ValidationError
 from django.db.models import Q
 from django.utils import timezone
 
@@ -273,12 +274,25 @@ def task_detect_highlights(self, job_id):
 
         order = 0
         unmatched = set()
+        unreadable_chunks = 0
+        last_parse_error = None
         for i, (document_id, chunk) in enumerate(flat_chunks, start=1):
             system_prompt, user_prompt = build_highlight_detection_prompt(chunk["text"], categories)
-            parsed = complete_structured(
-                client, schema=HighlightDetectionResult, system_prompt=system_prompt,
-                user_prompt=user_prompt, response_hint="highlight_detection",
-            )
+            try:
+                parsed = complete_structured(
+                    client, schema=HighlightDetectionResult, system_prompt=system_prompt,
+                    user_prompt=user_prompt, response_hint="highlight_detection",
+                )
+            except ValidationError as exc:
+                last_parse_error = exc
+                # Les points clés sont une annexe : une réponse illisible sur UN extrait (même
+                # après la relance corrective) ne doit pas faire échouer une revue de 27
+                # documents. On l'écarte, c'est tracé, et l'étape échoue seulement si aucun
+                # extrait n'a pu être analysé.
+                logger.warning("Points clés illisibles pour un extrait du job %s : extrait ignoré.", job.id)
+                unreadable_chunks += 1
+                update_step_progress(job, step_name, chunks_done=i, chunks_total=total)
+                continue
             document = documents_by_id.get(document_id)
 
             for item in parsed.highlights:
@@ -303,10 +317,12 @@ def task_detect_highlights(self, job_id):
 
             update_step_progress(job, step_name, chunks_done=i, chunks_total=total)
 
-        if unmatched:
+        if total and unreadable_chunks == total:
+            raise last_parse_error
+        if unmatched or unreadable_chunks:
             update_step_progress(
                 job, step_name, chunks_done=total, chunks_total=max(total, 1),
-                extra={"unmatched_categories": sorted(unmatched)},
+                extra={"unmatched_categories": sorted(unmatched), "unreadable_chunks": unreadable_chunks},
             )
         mark_step_result(job, step_name, result=PipelineStepRun.Status.SUCCEEDED)
     except Exception as exc:

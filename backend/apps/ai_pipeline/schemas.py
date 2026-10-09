@@ -125,8 +125,13 @@ class HighlightDetectionResult(_BareValueAllowed):
         if value is None:
             return []
         if isinstance(value, dict):  # un seul extrait renvoyé sans liste
-            return [value]
-        return value
+            value = [value]
+        if not isinstance(value, list):
+            return value
+        # Un élément sans extrait (« excerpt »: "" — constaté en réel sur une revue de 27
+        # photos) ne surligne rien : on l'écarte au lieu de rejeter toute la réponse, ce
+        # qui faisait échouer la revue entière à chaque nouvelle tentative.
+        return [item for item in value if not isinstance(item, dict) or _to_text(item.get("excerpt"), " ")]
 
 
 class ReviewDraftResult(_BareValueAllowed):
