@@ -142,3 +142,47 @@ class ReviewDraftResult(_BareValueAllowed):
     @classmethod
     def _coerce_markdown(cls, value):
         return _to_text(value, "\n\n")
+
+
+class PressEntryResult(BaseModel):
+    """Notice d'un journal dans la revue (cf. press_format). Seul le résumé est obligatoire :
+    un nom de journal ou un titre introuvable ne doit pas faire perdre la notice."""
+
+    journal: str = ""
+    rubrique: str = ""
+    titre: str = ""
+    resume: str = Field(min_length=1)
+
+    _ALIASES: ClassVar[dict] = {
+        "journal": ("journal", "source", "nom_du_journal", "newspaper"),
+        "rubrique": ("rubrique", "categorie", "section"),
+        "titre": ("titre", "titre_une", "headline", "title"),
+        "resume": ("resume", "résumé", "summary", "notice", "texte"),
+    }
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_variants(cls, data):
+        if not isinstance(data, (dict, list)):
+            return data
+        # Constaté en réel (ministral-14b, 4 pages sur 27) : la notice découpée en plusieurs
+        # objets — sujet principal, puis « En marge… » — au lieu d'un seul. On les recolle.
+        parts = [item for item in (data if isinstance(data, list) else [data]) if isinstance(item, dict)]
+        if not parts:
+            return data
+        normalized = [
+            {field: _to_text(next((part[k] for k in keys if k in part), ""), " ") for field, keys in cls._ALIASES.items()}
+            for part in parts
+        ]
+        first = lambda field: next((n[field] for n in normalized if n[field]), "")  # noqa: E731
+        return {
+            "journal": first("journal"),
+            "rubrique": first("rubrique"),
+            "titre": first("titre"),
+            "resume": " ".join(n["resume"] for n in normalized if n["resume"]),
+        }
+
+    @field_validator("journal", "rubrique", "titre", "resume", mode="before")
+    @classmethod
+    def _coerce_text(cls, value):
+        return _to_text(value, " ")

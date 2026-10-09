@@ -127,8 +127,33 @@ export interface Highlight {
   source_document: string | null
 }
 
+/** Notice d'un journal dans la revue de presse. */
+export interface PressReviewEntry {
+  source: string
+  headline: string
+  summary: string
+  documents: string[]
+}
+
+export interface PressReviewSection {
+  key: string
+  title: string
+  color: string
+  icon: string
+  entries: PressReviewEntry[]
+}
+
+/** Revue au format « revue de presse » (bandeau, rubriques, une notice par journal). */
+export interface StructuredReview {
+  country: string
+  date_label: string
+  sections: PressReviewSection[]
+}
+
 export interface GeneratedReview {
   summary_markdown: string
+  /** null pour les revues générées avant ce format (affichées en Markdown). */
+  structured: StructuredReview | null
   pdf_file: string | null
   docx_file: string | null
   generated_at: string | null

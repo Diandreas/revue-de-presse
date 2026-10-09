@@ -211,6 +211,9 @@ MISTRAL_API_KEY = env("MISTRAL_API_KEY", default="")
 MISTRAL_MODEL = env("MISTRAL_MODEL", default="ministral-8b-latest")
 # Modèle de VISION qui lit les photos / PDF scannés (doit déclarer la capacité « vision »).
 MISTRAL_VISION_MODEL = env("MISTRAL_VISION_MODEL", default="ministral-8b-latest")
+# Rédaction des notices de la revue (une par journal) : modèle plus fidèle que celui des
+# résumés intermédiaires (moins de phrases inventées sur les pages courtes).
+MISTRAL_REVIEW_MODEL = env("MISTRAL_REVIEW_MODEL", default="ministral-14b-latest")
 # Moteur de lecture des photos : auto (Mistral si clé présente, sinon Tesseract) | mistral | tesseract
 OCR_ENGINE = env("OCR_ENGINE", default="auto")
 

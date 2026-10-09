@@ -113,7 +113,16 @@ class HighlightSerializer(serializers.ModelSerializer):
 
 
 class GeneratedReviewSerializer(serializers.ModelSerializer):
+    # Rubriques résolues (titre, couleur, pictogramme) ; null pour les revues antérieures
+    # au format « revue de presse », que le frontend affiche alors en Markdown.
+    structured = serializers.SerializerMethodField()
+
     class Meta:
         model = GeneratedReview
-        fields = ["summary_markdown", "pdf_file", "docx_file", "generated_at"]
+        fields = ["summary_markdown", "structured", "pdf_file", "docx_file", "generated_at"]
         read_only_fields = fields
+
+    def get_structured(self, obj):
+        from apps.ai_pipeline.press_format import present
+
+        return present(obj.structured)

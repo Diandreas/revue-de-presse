@@ -1,9 +1,11 @@
-"""Rendu de la revue générée (Markdown) en PDF (WeasyPrint) et DOCX (python-docx).
+"""Rendu de la revue générée en PDF (WeasyPrint) et DOCX (python-docx).
 
-Le document exporté est celui que le client diffuse à sa direction : en-tête de
-publication (titre, organisation, date), la revue elle-même, puis une annexe « Points clés
-détectés » regroupée par catégorie. Le rendu est mis en cache sur le modèle : un même
-format n'est généré qu'une fois.
+Le document exporté est celui que le client diffuse à sa direction. Format par défaut :
+la revue de presse « à la camerounaise » (cf. press_format) — bandeau « REVUE DE PRESSE —
+CAMEROUN — date », rubriques en bandeaux de couleur, une notice par journal — puis une
+annexe « Points clés détectés » regroupée par catégorie. Les revues générées avant ce
+format (Markdown libre) gardent l'ancienne mise en page. Le rendu est mis en cache sur le
+modèle : un même format n'est généré qu'une fois.
 
 Sécurité : le texte de la revue est rédigé par l'IA à partir d'articles fournis par le
 client — il peut donc contenir du HTML hostile recopié d'une coupure. Le Markdown est rendu
@@ -22,7 +24,11 @@ from django.core.files.base import ContentFile
 from django.utils import timezone
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Pt, RGBColor
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Inches, Mm, Pt, RGBColor
+
+from .press_format import entry_paragraph, present
 
 logger = logging.getLogger(__name__)
 
@@ -146,10 +152,49 @@ def _markdown_to_safe_html(text):
     return md.markdown((text or "").replace("<", "&lt;"), extensions=["extra", "sane_lists"])
 
 
-def _build_pdf_html(review):
-    ctx = _context(review)
+PRESS_PDF_STYLE = """
+.press-masthead { background: #1A237E; color: #fff; text-align: center; padding: 16pt 12pt 13pt; margin-bottom: 6pt; }
+.press-masthead .name { font-size: 25pt; font-weight: bold; letter-spacing: 1.5pt; }
+.press-masthead .sub { font-size: 10.5pt; color: #AAAAFF; margin-top: 4pt; letter-spacing: 0.5pt; }
+.press-masthead .custom { font-size: 9.5pt; color: #ffffff; margin-top: 5pt; font-style: italic; }
+.banner { color: #fff; font-weight: bold; font-size: 12pt; padding: 8pt 11pt 7pt; margin: 16pt 0 2pt; letter-spacing: 0.4pt; page-break-after: avoid; }
+.entry { page-break-inside: avoid; }
+.entry .src { color: #8B0000; font-weight: bold; font-size: 10.5pt; margin: 10pt 0 3pt; page-break-after: avoid; }
+.entry .txt { text-align: justify; margin: 0 0 5pt; }
+"""
+
+
+def _custom_title(job):
+    """Titre saisi par l'utilisateur, affiché sous le bandeau (pas le titre daté par défaut)."""
+    title = (job.title or "").strip()
+    return "" if not title or title.lower().startswith("revue de presse du") else title
+
+
+def _press_review_html(view, review):
     esc = html.escape
+    sub = " — ".join(part for part in (view["country"], view["date_label"]) if part)
+    custom = _custom_title(review.job)
     parts = [
+        "<header class='press-masthead'><div class='name'>REVUE DE PRESSE</div>"
+        + (f"<div class='sub'>{esc(sub)}</div>" if sub else "")
+        + (f"<div class='custom'>{esc(custom)}</div>" if custom else "")
+        + "</header>"
+    ]
+    for section in view["sections"]:
+        color = _safe_color(section["color"], "#1A237E")
+        # Pas de pictogramme dans le PDF : aucune police emoji n'est garantie côté serveur.
+        parts.append(f"<div class='banner' style='background:{color}'>{esc(section['title'])}</div>")
+        for entry in section["entries"]:
+            parts.append(
+                f"<div class='entry'><p class='src'>▶ {esc(entry.get('source', ''))}</p>"
+                f"<p class='txt'>{esc(entry_paragraph(entry))}</p></div>"
+            )
+    return parts
+
+
+def _legacy_review_html(review, ctx):
+    esc = html.escape
+    return [
         f"<header class='masthead'><div class='kicker'>Revue de presse</div>"
         f"<h1 class='title'>{esc(ctx['title'])}</h1>"
         f"<div class='meta'>{esc(ctx['organization'])} · {esc(ctx['date'])} · "
@@ -157,6 +202,13 @@ def _build_pdf_html(review):
         "<div class='bar'></div></header>",
         f"<section class='review'>{_markdown_to_safe_html(review.summary_markdown)}</section>",
     ]
+
+
+def _build_pdf_html(review):
+    ctx = _context(review)
+    esc = html.escape
+    view = present(review.structured)
+    parts = _press_review_html(view, review) if view else _legacy_review_html(review, ctx)
 
     groups = _grouped_highlights(review)
     if groups:
@@ -184,7 +236,7 @@ def _build_pdf_html(review):
     parts.append(f"<p class='disclaimer'>{esc(DISCLAIMER)}</p>")
     # Nom d'organisation injecté dans une chaîne CSS (pied de page) : ni guillemet ni antislash.
     footer_org = re.sub(r'["\\\n\r]', "", ctx["organization"])
-    style = PDF_STYLE % {"org": footer_org, "serif": SERIF_STACK, "sans": SANS_STACK}
+    style = PDF_STYLE % {"org": footer_org, "serif": SERIF_STACK, "sans": SANS_STACK} + PRESS_PDF_STYLE
     return f"<html lang='fr'><head><meta charset='utf-8'><style>{style}</style></head><body>{''.join(parts)}</body></html>"
 
 
@@ -224,12 +276,126 @@ def _hex_to_rgb(value):
     return RGBColor(int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16))
 
 
-def _render_docx(review):
-    ctx = _context(review)
-    document = Document()
-    document.styles["Normal"].font.name = "Calibri"
-    document.styles["Normal"].font.size = Pt(11)
+# Mise en page du modèle de revue fourni par le client : A4, marges 0,75", Arial 11,
+# bandeaux = tableaux d'une cellule sur fond de couleur, noms de journaux en rouge foncé.
+PRESS_RED = RGBColor(0x8B, 0x00, 0x00)
+CONTENT_WIDTH_DXA = 9360  # 6,5" de largeur utile
 
+
+def _shade_cell(cell, hex_color):
+    tc_pr = cell._tc.get_or_add_tcPr()
+    shading = OxmlElement("w:shd")
+    shading.set(qn("w:val"), "clear")
+    shading.set(qn("w:color"), "auto")
+    shading.set(qn("w:fill"), _safe_color(hex_color).lstrip("#"))
+    tc_pr.append(shading)
+
+
+def _cell_margins(cell, *, top, left, bottom, right):
+    tc_pr = cell._tc.get_or_add_tcPr()
+    margins = OxmlElement("w:tcMar")
+    for side, value in (("top", top), ("left", left), ("bottom", bottom), ("right", right)):
+        node = OxmlElement(f"w:{side}")
+        node.set(qn("w:w"), str(value))
+        node.set(qn("w:type"), "dxa")
+        margins.append(node)
+    tc_pr.append(margins)
+
+
+def _full_width(table):
+    tbl_pr = table._tbl.tblPr
+    width = OxmlElement("w:tblW")
+    width.set(qn("w:w"), str(CONTENT_WIDTH_DXA))
+    width.set(qn("w:type"), "dxa")
+    tbl_pr.append(width)
+
+
+def _banner(document, hex_color, lines, *, margins):
+    """Bandeau pleine largeur : `lines` = [(texte, taille, gras, couleur RGB, centré)]."""
+    table = document.add_table(rows=1, cols=1)
+    _full_width(table)
+    cell = table.rows[0].cells[0]
+    _shade_cell(cell, hex_color)
+    _cell_margins(cell, **margins)
+    for index, (text, size, bold, color, centered) in enumerate(lines):
+        paragraph = cell.paragraphs[0] if index == 0 else cell.add_paragraph()
+        if centered:
+            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        paragraph.paragraph_format.space_after = Pt(2)
+        run = paragraph.add_run(text)
+        run.bold = bold
+        run.font.size = Pt(size)
+        run.font.color.rgb = color
+    return table
+
+
+def _add_page_number_footer(document, label):
+    paragraph = document.sections[0].footer.paragraphs[0]
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = paragraph.add_run(f"{label} — page ")
+    run.font.size = Pt(8)
+    run.font.color.rgb = RGBColor(0x94, 0xA3, 0xB8)
+    field_run = paragraph.add_run()
+    field_run.font.size = Pt(8)
+    field_run.font.color.rgb = RGBColor(0x94, 0xA3, 0xB8)
+    for kind, text in (("begin", None), (None, "PAGE"), ("end", None)):
+        if kind:
+            node = OxmlElement("w:fldChar")
+            node.set(qn("w:fldCharType"), kind)
+        else:
+            node = OxmlElement("w:instrText")
+            node.set(qn("xml:space"), "preserve")
+            node.text = text
+        field_run._r.append(node)
+
+
+def _new_document():
+    document = Document()
+    section = document.sections[0]
+    section.page_width, section.page_height = Mm(210), Mm(297)
+    for side in ("left_margin", "right_margin", "top_margin", "bottom_margin"):
+        setattr(section, side, Inches(0.75))
+    normal = document.styles["Normal"]
+    normal.font.name = "Arial"
+    normal.font.size = Pt(11)
+    normal.element.rPr.rFonts.set(qn("w:eastAsia"), "Arial")
+    return document
+
+
+def _write_press_review(document, view, review):
+    sub = "  —  ".join(part for part in (view["country"], view["date_label"]) if part)
+    white = RGBColor(0xFF, 0xFF, 0xFF)
+    lines = [("REVUE DE PRESSE", 26, True, white, True)]
+    if sub:
+        lines.append((sub, 11, False, RGBColor(0xAA, 0xAA, 0xFF), True))
+    custom = _custom_title(review.job)
+    if custom:
+        lines.append((custom, 10, False, white, True))
+    _banner(document, "#1A237E", lines, margins={"top": 280, "left": 240, "bottom": 200, "right": 240})
+
+    for section in view["sections"]:
+        spacer = document.add_paragraph()
+        spacer.paragraph_format.space_before = Pt(6)
+        spacer.paragraph_format.space_after = Pt(0)
+        _banner(
+            document, section["color"], [(f"  {section['icon']}  {section['title']}", 13, True, white, False)],
+            margins={"top": 100, "left": 160, "bottom": 100, "right": 160},
+        )
+        for entry in section["entries"]:
+            heading = document.add_paragraph()
+            heading.paragraph_format.space_before = Pt(10)
+            heading.paragraph_format.space_after = Pt(3)
+            heading.paragraph_format.keep_with_next = True
+            run = heading.add_run(f"▶ {entry.get('source', '')}")
+            run.bold = True
+            run.font.size = Pt(11)
+            run.font.color.rgb = PRESS_RED
+            body = document.add_paragraph(entry_paragraph(entry))
+            body.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            body.paragraph_format.space_after = Pt(5)
+
+
+def _write_legacy_review(document, review, ctx):
     kicker = document.add_paragraph()
     kicker_run = kicker.add_run("REVUE DE PRESSE")
     kicker_run.bold = True
@@ -258,6 +424,17 @@ def _render_docx(review):
             _add_inline_runs(quote, stripped.lstrip("> "))
         else:
             _add_inline_runs(document.add_paragraph(), stripped)
+
+
+def _render_docx(review):
+    ctx = _context(review)
+    view = present(review.structured)
+    document = _new_document()
+    _add_page_number_footer(document, f"Revue de presse · {ctx['organization']}")
+    if view:
+        _write_press_review(document, view, review)
+    else:
+        _write_legacy_review(document, review, ctx)
 
     groups = _grouped_highlights(review)
     if groups:
@@ -288,6 +465,7 @@ def _render_docx(review):
 
     disclaimer = document.add_paragraph(DISCLAIMER)
     disclaimer.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    disclaimer.paragraph_format.space_before = Pt(14)
     disclaimer.runs[0].font.size = Pt(8.5)
     disclaimer.runs[0].font.color.rgb = RGBColor(0x94, 0xA3, 0xB8)
 

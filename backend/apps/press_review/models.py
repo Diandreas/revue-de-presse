@@ -199,6 +199,9 @@ class Highlight(TimeStampedModel):
 class GeneratedReview(TimeStampedModel):
     job = models.OneToOneField(PressReviewJob, on_delete=models.CASCADE, related_name="review")
     summary_markdown = models.TextField(blank=True)
+    # Revue au format « revue de presse » (rubriques / journaux), cf. ai_pipeline.press_format.
+    # Vide pour les revues générées avant ce format : elles restent affichées en Markdown.
+    structured = models.JSONField(default=dict, blank=True)
     pdf_file = models.FileField(
         upload_to=generated_review_upload_path, null=True, blank=True, max_length=FILE_PATH_MAX_LENGTH
     )

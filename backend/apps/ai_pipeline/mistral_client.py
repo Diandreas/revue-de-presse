@@ -149,6 +149,12 @@ class FakeMistralClient(MistralClient):
                 }
             ]
         },
+        "press_entry": lambda: {
+            "journal": "JOURNAL (MOCK)",
+            "rubrique": "generale",
+            "titre": "Titre factice",
+            "resume": "[MOCK] Notice factice — configurez MISTRAL_API_KEY pour une vraie revue de presse.",
+        },
         "review_drafting": lambda: {
             "summary_markdown": (
                 "# Revue de presse (MOCK)\n\n"
@@ -181,13 +187,16 @@ def get_mistral_client():
     return MistralClient()
 
 
-def complete_structured(client, *, schema, system_prompt, user_prompt, response_hint=None):
+def complete_structured(client, *, schema, system_prompt, user_prompt, response_hint=None, temperature=None):
     """Appel JSON + validation par `schema`, avec UNE nouvelle tentative corrective si la
     réponse ne respecte pas le format (défaut fréquent des petits modèles).
 
     Fonctionne avec tout objet exposant `complete_json` (client réel, `FakeMistralClient`,
     faux clients de test)."""
-    raw = client.complete_json(system_prompt=system_prompt, user_prompt=user_prompt, response_hint=response_hint)
+    options = {} if temperature is None else {"temperature": temperature}
+    raw = client.complete_json(
+        system_prompt=system_prompt, user_prompt=user_prompt, response_hint=response_hint, **options
+    )
     try:
         return schema.model_validate(raw)
     except ValidationError as exc:
@@ -198,5 +207,7 @@ def complete_structured(client, *, schema, system_prompt, user_prompt, response_
             f"demandé ({problems}). Réponds à nouveau avec EXACTEMENT le format demandé, sans "
             "aucun texte en dehors du JSON."
         )
-        raw = client.complete_json(system_prompt=system_prompt, user_prompt=corrective, response_hint=response_hint)
+        raw = client.complete_json(
+            system_prompt=system_prompt, user_prompt=corrective, response_hint=response_hint, **options
+        )
         return schema.model_validate(raw)  # 2e échec : ValidationError, le job échoue proprement

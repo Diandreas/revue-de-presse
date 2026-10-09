@@ -15,6 +15,7 @@ l'utilisateur ait à cliquer sur « Réessayer »."""
 import logging
 
 from celery import chain, shared_task
+from django.conf import settings
 from pydantic import ValidationError
 from django.db.models import Q
 from django.utils import timezone
@@ -40,9 +41,10 @@ from .chunking import chunk_document_text
 from .errors import describe_error, is_configuration_error, is_retryable_error
 from .extraction import extract_text_from_image, extract_text_from_pdf
 from .matching import match_category
-from .mistral_client import complete_structured, get_mistral_client
-from .prompts import build_chunk_summary_prompt, build_highlight_detection_prompt, build_review_drafting_prompt
-from .schemas import ChunkSummaryResult, HighlightDetectionResult, ReviewDraftResult
+from .mistral_client import MistralClient, complete_structured, get_mistral_client
+from .press_format import DEFAULT_RUBRIQUE, build_structured, country_label, long_french_date, match_rubrique, to_markdown
+from .prompts import build_chunk_summary_prompt, build_highlight_detection_prompt, build_press_entry_prompt
+from .schemas import ChunkSummaryResult, HighlightDetectionResult, PressEntryResult
 
 logger = logging.getLogger(__name__)
 
@@ -333,38 +335,93 @@ def task_detect_highlights(self, job_id):
 
 @shared_task(bind=True, max_retries=MAX_STEP_RETRIES)
 def task_draft_review(self, job_id):
+    """Rédige la revue au format « revue de presse » : une notice par journal (nom, titre de
+    la une, résumé), rangée dans sa rubrique — cf. press_format.
+
+    Un appel IA par document, mis en cache dans le résultat de l'étape : une nouvelle
+    tentative (rate limit, « Réessayer ») reprend là où l'étape s'était arrêtée au lieu de
+    tout refaire sur une revue de 27 photos."""
     job = PressReviewJob.objects.get(pk=job_id)
     step_name = PipelineStepRun.StepName.REVIEW_DRAFTING
     try:
-        enter_step(job, PressReviewJob.Status.REVIEW_DRAFTING, step_name)
+        step = enter_step(job, PressReviewJob.Status.REVIEW_DRAFTING, step_name)
         client = get_mistral_client()
+        if type(client) is MistralClient and settings.MISTRAL_REVIEW_MODEL:
+            client = MistralClient(model=settings.MISTRAL_REVIEW_MODEL)
 
         chunking_step = PipelineStepRun.objects.get(
             job=job, step_name=PipelineStepRun.StepName.CHUNKING_SUMMARIZATION
         )
-        documents_payload = chunking_step.result_summary.get("documents", [])
-        chunk_summaries = [c["summary"] for doc in documents_payload for c in doc["chunks"]]
-        document_titles = [
-            d.original_filename
-            for d in _ordered_documents(job)
-            if d.extraction_status == SourceDocument.ExtractionStatus.DONE
+        summaries_by_document = {
+            doc["document_id"]: [c.get("summary", "") for c in doc["chunks"]]
+            for doc in chunking_step.result_summary.get("documents", [])
+        }
+        documents = [
+            d for d in _ordered_documents(job) if d.extraction_status == SourceDocument.ExtractionStatus.DONE
         ]
-
-        highlights_payload = [
-            {"category_name": h.category.name, "excerpt": h.excerpt, "explanation": h.explanation}
-            for h in Highlight.objects.filter(job=job).select_related("category")
-        ]
-
-        system_prompt, user_prompt = build_review_drafting_prompt(
-            document_titles=document_titles, chunk_summaries=chunk_summaries, highlights=highlights_payload
-        )
-        parsed = complete_structured(
-            client, schema=ReviewDraftResult, system_prompt=system_prompt,
-            user_prompt=user_prompt, response_hint="review_drafting",
+        cache = dict((step.result_summary or {}).get("entries") or {})
+        total = len(documents)
+        update_step_progress(
+            job, step_name, chunks_done=len([d for d in documents if str(d.id) in cache]),
+            chunks_total=max(total, 1), extra={"unit": "journaux"},
         )
 
+        for i, document in enumerate(documents, start=1):
+            key = str(document.id)
+            if key in cache:
+                continue
+            summaries = summaries_by_document.get(key, [])
+            system_prompt, user_prompt = build_press_entry_prompt(
+                filename=document.original_filename, text=document.extracted_text, chunk_summaries=summaries
+            )
+            try:
+                parsed = complete_structured(
+                    client, schema=PressEntryResult, system_prompt=system_prompt,
+                    user_prompt=user_prompt, response_hint="press_entry", temperature=0.1,
+                )
+                entry = {
+                    "source": parsed.journal.upper(),
+                    "rubrique": match_rubrique(parsed.rubrique),
+                    "headline": parsed.titre,
+                    "summary": parsed.resume,
+                }
+            except ValidationError:
+                # Notice illisible même après relance : on garde au moins les résumés du
+                # document plutôt que de perdre toute la revue.
+                logger.warning("Notice illisible pour %s (job %s) : résumés bruts.", document.original_filename, job.id)
+                entry = {"source": "", "rubrique": DEFAULT_RUBRIQUE, "headline": "", "summary": " ".join(summaries)}
+            if not entry["source"]:
+                # Pas le nom de fichier (« WhatsApp Image 2026-10-09 at… ») : illisible dans
+                # une revue diffusée ; le n° renvoie à l'onglet « Documents ».
+                kind = "photo" if document.kind == SourceDocument.Kind.IMAGE else "document"
+                entry["source"] = f"JOURNAL NON IDENTIFIÉ ({kind} n° {i})"
+            entry["documents"] = [document.original_filename]
+            cache[key] = entry
+            update_step_progress(job, step_name, chunks_done=len(cache), chunks_total=max(total, 1), extra={"entries": cache})
+
+        structured = build_structured(
+            entries=[cache[str(d.id)] for d in documents if str(d.id) in cache],
+            country=country_label(job.organization.country),
+            date_label=long_french_date(job.created_at),
+        )
+        if not any(section["entries"] for section in structured["sections"]):
+            raise ValueError("Aucun document lisible : impossible de rédiger la revue de presse.")
+
+        # Nouvelle rédaction -> les exports déjà générés (ancienne version) sont périmés.
+        previous = GeneratedReview.objects.filter(job=job).first()
+        if previous is not None:
+            for stale in (previous.pdf_file, previous.docx_file):
+                if stale:
+                    stale.delete(save=False)
         GeneratedReview.objects.update_or_create(
-            job=job, defaults={"summary_markdown": parsed.summary_markdown, "generated_at": timezone.now()}
+            job=job,
+            defaults={
+                "summary_markdown": to_markdown(structured),
+                "structured": structured,
+                "generated_at": timezone.now(),
+                "pdf_file": None,
+                "docx_file": None,
+            },
         )
 
         mark_step_result(job, step_name, result=PipelineStepRun.Status.SUCCEEDED)

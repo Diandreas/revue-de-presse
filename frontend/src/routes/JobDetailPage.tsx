@@ -6,6 +6,7 @@ import { useParams } from 'react-router-dom'
 import { extractErrorMessage } from '../api/client'
 import type { CategoryType, Highlight, PressReviewJobDetail, SourceDocument } from '../api/types'
 import { DocumentGrid } from '../components/DocumentGrid'
+import { PressReviewSheet, pressReviewToText } from '../components/PressReviewSheet'
 import { PIPELINE_STEPS, ProgressStepper } from '../components/ProgressStepper'
 import { JobStatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/Toast'
@@ -330,7 +331,13 @@ export default function JobDetailPage() {
 
   const exportActions = isReady && (
     <>
-      {review?.summary_markdown && <CopyButton text={review.summary_markdown} label="Copier le texte" className="!h-10 !px-4" />}
+      {review?.summary_markdown && (
+        <CopyButton
+          text={review.structured ? pressReviewToText(review.structured) : review.summary_markdown}
+          label="Copier le texte"
+          className="!h-10 !px-4"
+        />
+      )}
       <button type="button" className="btn-secondary" disabled={exportMutation.isPending} onClick={() => void handleExport('docx')}>
         {exportingFormat === 'docx' ? <Spinner /> : <DownloadIcon className="h-4 w-4" />}
         Word
@@ -428,7 +435,8 @@ export default function JobDetailPage() {
                     <Skeleton className="h-4 w-4/5" />
                   </div>
                 )}
-                {review && (
+                {review?.structured && <PressReviewSheet review={review.structured} />}
+                {review && !review.structured && (
                   <div className="prose-review">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{review.summary_markdown}</ReactMarkdown>
                   </div>
