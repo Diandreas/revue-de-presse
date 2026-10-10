@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Revue de Presse — présentation</title>
+<style>
+  /* The site's own faces (gathered from presse.mirlab.cloud): Fraunces for display, Inter for UI. */
+  @font-face { font-family: Display; src: url(fonts/fraunces-500.ttf) format('truetype'); font-weight: 500; }
+  @font-face { font-family: Display; src: url(fonts/fraunces-600.ttf) format('truetype'); font-weight: 600; }
+  @font-face { font-family: Display; src: url(fonts/fraunces-700.ttf) format('truetype'); font-weight: 700; }
+  @font-face { font-family: UI; src: url(fonts/inter-400.ttf) format('truetype'); font-weight: 400; }
+  @font-face { font-family: UI; src: url(fonts/inter-500.ttf) format('truetype'); font-weight: 500; }
+  @font-face { font-family: UI; src: url(fonts/inter-600.ttf) format('truetype'); font-weight: 600; }
+  @font-face { font-family: UI; src: url(fonts/inter-700.ttf) format('truetype'); font-weight: 700; }
+  html, body { margin: 0; height: 100%; background: #111; overflow: hidden; }
+  body { display: grid; place-items: center; }
+  canvas { display: block; max-width: 100vw; max-height: 100vh; width: auto; height: auto; }
+  #hud { position: fixed; left: 12px; bottom: 10px; font: 12px/1 ui-monospace, monospace; color: #888; }
+  .render #hud { display: none; }
+</style>
+</head>
+<body>
+<canvas id="film"></canvas>
+<div id="hud">espace : lecture/pause · ←/→ : image par image · clic : se déplacer · ?format=9x16 pour le vertical</div>
+<script type="module" src="film.js"></script>
+</body>
+</html>

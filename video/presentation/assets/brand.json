@@ -1,0 +1,98 @@
+{
+ "url": "https://presse.mirlab.cloud/login",
+ "title": "Revue de Presse — veille média augmentée par l'IA",
+ "description": "Revue de Presse : déposez vos coupures de presse (PDF ou photos) et obtenez une revue de presse professionnelle, avec les risques juridiques, les points clés et les intox repérés par l'IA.",
+ "themeColor": [
+  "#0b1020"
+ ],
+ "text_colors": [
+  [
+   "#0f172b",
+   5
+  ],
+  [
+   "#ffffff",
+   3
+  ],
+  [
+   "#90a1b9",
+   3
+  ],
+  [
+   "#cad5e2",
+   3
+  ],
+  [
+   "#62748e",
+   3
+  ],
+  [
+   "#45556c",
+   3
+  ],
+  [
+   "#1d293d",
+   2
+  ],
+  [
+   "#314158",
+   2
+  ],
+  [
+   "#ffd230",
+   1
+  ],
+  [
+   "#c10007",
+   1
+  ]
+ ],
+ "background_colors": [
+  [
+   "#ffffff",
+   24
+  ],
+  [
+   "#0b1020",
+   20
+  ],
+  [
+   "#fffdf8",
+   15
+  ]
+ ],
+ "font_families": [
+  [
+   "Inter",
+   21
+  ],
+  [
+   "Fraunces",
+   7
+  ]
+ ],
+ "font_weights": [
+  [
+   "Inter 400",
+   15
+  ],
+  [
+   "Fraunces 600",
+   6
+  ],
+  [
+   "Inter 600",
+   4
+  ],
+  [
+   "Inter 500",
+   2
+  ],
+  [
+   "Fraunces 700",
+   1
+  ]
+ ],
+ "css_vars": {},
+ "wordmark": null
+}
