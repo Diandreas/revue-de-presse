@@ -262,6 +262,7 @@ def test_review_api_returns_resolved_rubriques(api_client, user, structured_revi
 
 
 def test_known_general_dailies_always_land_in_general_press():
+    """Le modèle classe parfois une page par son sujet (un décès en une -> « Décès »)."""
     structured = build_structured(
         entries=[{"source": "THE GUARDIAN POST", "rubrique": "deces", "headline": "No hope for Hope!", "summary": "Décès du PCA de la CDC.", "documents": []}]
     )
@@ -281,3 +282,82 @@ def test_a_notice_split_into_several_objects_is_glued_back_together():
     assert result.resume == "Le quotidien *Myhospital* met en avant le dépistage. En marge, des consultations gratuites à Yassa."
     structured = build_structured(entries=[{"source": "MYHOSPITAL", "rubrique": "societe", "headline": "", "summary": result.resume, "documents": []}])
     assert structured["sections"][0]["entries"][0]["summary"].startswith("Le quotidien Myhospital met")
+
+
+# --------------------------------------------------------------------------- classement des journaux
+
+
+def _sources(view, key):
+    return [e["source"] for s in view["sections"] if s["key"] == key for e in s["entries"]]
+
+
+def test_newspapers_are_ranked_from_most_read_to_least_known_within_each_rubric():
+    structured = build_structured(
+        entries=[
+            {"source": "THE SUN", "rubrique": "generale", "headline": "", "summary": "a", "documents": []},
+            {"source": "LE PETIT ÉCHO", "rubrique": "generale", "headline": "", "summary": "b", "documents": []},
+            {"source": "JOURNAL NON IDENTIFIÉ (photo n° 3)", "rubrique": "generale", "headline": "", "summary": "c", "documents": []},
+            {"source": "Mutations", "rubrique": "generale", "headline": "", "summary": "d", "documents": []},
+            {"source": "CAMEROON TRIBUNE", "rubrique": "generale", "headline": "", "summary": "e", "documents": []},
+            {"source": "LA GAZETTE DU NORD", "rubrique": "generale", "headline": "", "summary": "f", "documents": []},
+            {"source": "LE JOUR", "rubrique": "generale", "headline": "", "summary": "g", "documents": []},
+        ]
+    )
+
+    assert _sources(present(structured), "generale") == [
+        "CAMEROON TRIBUNE", "LE JOUR", "MUTATIONS", "THE SUN",
+        "LE PETIT ÉCHO", "LA GAZETTE DU NORD",          # inconnus : ordre de lecture
+        "JOURNAL NON IDENTIFIÉ (photo n° 3)",          # toujours en dernier
+    ]
+    assert "## 📰 LA PRESSE GÉNÉRALE\n\n### ▶ CAMEROON TRIBUNE" in to_markdown(structured)
+
+
+def test_reviews_stored_in_reading_order_are_ranked_when_displayed():
+    """Le classement s'applique au rendu : les revues générées avant lui en profitent aussi."""
+    stored = {
+        "format": "press_review_v1", "country": "CAMEROUN", "date_label": "",
+        "sections": [{"key": "generale", "entries": [
+            {"source": "THE GUARDIAN POST", "headline": "", "summary": "x", "documents": []},
+            {"source": "LE MESSAGER", "headline": "", "summary": "y", "documents": []},
+            {"source": "CAMEROON TRIBUNE", "headline": "", "summary": "z", "documents": []},
+        ]}],
+    }
+
+    assert _sources(present(stored), "generale") == ["CAMEROON TRIBUNE", "LE MESSAGER", "THE GUARDIAN POST"]
+
+
+def test_a_misread_newspaper_name_is_corrected_merged_and_filed_in_its_rubric():
+    """Constaté en réel : « L'OCIL DU SAHEL » (Œ mal lu) ; un titre économique dont la une
+    parle d'élections reste en presse économique."""
+    structured = build_structured(
+        entries=[
+            {"source": "L'OCIL DU SAHEL", "rubrique": "generale", "headline": "", "summary": "Attaques.", "documents": ["a.jpg"]},
+            {"source": "LE FINANCIER D'AFRIQUE", "rubrique": "politique", "headline": "", "summary": "Accord.", "documents": ["b.jpg"]},
+            {"source": "L'ŒIL DU SAHEL", "rubrique": "regionale", "headline": "", "summary": "Bouba Ndjidda.", "documents": ["c.jpg"]},
+            {"source": "MUTATIONS (30 ANS)", "rubrique": "societe", "headline": "", "summary": "Visas.", "documents": ["d.jpg"]},
+        ]
+    )
+
+    view = present(structured)
+    assert _sources(view, "regionale") == ["L'ŒIL DU SAHEL"]
+    sahel = view["sections"][[s["key"] for s in view["sections"]].index("regionale")]["entries"][0]
+    assert sahel["summary"] == "Attaques. Bouba Ndjidda." and sahel["documents"] == ["a.jpg", "c.jpg"]
+    assert _sources(view, "economie") == ["LE FINANCIER D'AFRIQUE"]
+    # début de nom reconnu : classé et rangé comme Mutations, mais nommé tel qu'imprimé
+    assert _sources(view, "generale") == ["MUTATIONS (30 ANS)"]
+
+
+@pytest.mark.parametrize(
+    "printed, expected",
+    [
+        ("Cameroon Tribune", "CAMEROON TRIBUNE"),
+        ("CAMEROUN TRIBUNE", "CAMEROON TRIBUNE"),
+        ("LA NOUVELLE EXPRESSI0N", "LA NOUVELLE EXPRESSION"),   # zéro lu à la place du O
+        ("THE POST", "THE POST"),                               # pas confondu avec The Guardian Post
+        ("LE CITOYEN", "LE CITOYEN"),                           # inconnu : laissé tel quel
+    ],
+)
+def test_newspaper_names_are_normalised_without_confusing_titles(printed, expected):
+    from apps.ai_pipeline.media import display_name
+
+    assert display_name(printed) == expected

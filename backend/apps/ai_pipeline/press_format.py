@@ -11,12 +11,15 @@ La revue est stockée sous forme structurée (`GeneratedReview.structured`) :
           "summary": "Le quotidien gouvernemental ouvre sur…", "documents": ["une.jpg"]}]}]}
 
 Titres, couleurs et pictogrammes des rubriques ne sont PAS stockés : ils sont résolus au
-rendu (`present`), pour pouvoir faire évoluer la charte sans régénérer les revues.
+rendu (`present`), pour pouvoir faire évoluer la charte sans régénérer les revues. Le
+classement des journaux aussi : dans chaque rubrique, du plus lu / plus fiable au moins
+connu (cf. media.py), les journaux de même rang restant dans l'ordre de lecture.
 """
 import re
-import unicodedata
 
 from django.utils import timezone
+
+from . import media
 
 FORMAT_VERSION = "press_review_v1"
 
@@ -53,15 +56,6 @@ _RUBRIQUE_KEYWORDS = [
     ("generale", ("general", "information")),
 ]
 
-# Quotidiens / hebdos d'information générale : toujours en « presse générale », quel que
-# soit le sujet de leur une (le modèle classe parfois la page par son sujet : un décès en
-# une du Guardian Post finissait en « Décès et hommages »).
-GENERAL_DAILIES = {
-    "cameroon tribune", "le jour", "le messager", "mutations", "la nouvelle expression",
-    "emergence", "the guardian post", "the sun", "the post", "le quotidien", "integration",
-    "l action", "la voix du centre", "repere", "l anecdote", "le popoli",
-}
-
 _COUNTRIES = {
     "CM": "CAMEROUN", "GA": "GABON", "CG": "CONGO", "CD": "RD CONGO", "TD": "TCHAD",
     "CF": "CENTRAFRIQUE", "GQ": "GUINÉE ÉQUATORIALE", "CI": "CÔTE D'IVOIRE", "SN": "SÉNÉGAL",
@@ -74,9 +68,7 @@ _MONTHS = (
 )
 
 
-def _plain(text):
-    text = unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode()
-    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+_plain = media.plain
 
 
 def match_rubrique(value):
@@ -122,27 +114,30 @@ def plain_text(text):
 def build_structured(*, entries, country="", date_label=""):
     """`entries` : dicts {source, rubrique, headline, summary, documents} dans l'ordre de
     lecture. Toutes les pages d'un même journal sont fusionnées en une seule notice, comme
-    dans une revue rédigée à la main ; un journal classé « presse générale » sur l'une de
-    ses pages reste en presse générale (le modèle classe parfois une page par son sujet)."""
+    dans une revue rédigée à la main. Un journal connu (media.py) prend son nom de référence
+    et sa rubrique, quel que soit le sujet de sa une ; sinon, un journal classé « presse
+    générale » sur l'une de ses pages reste en presse générale (le modèle classe parfois une
+    page par son sujet)."""
     notices = []
     by_source = {}
     for entry in entries:
         rubrique = entry.get("rubrique") if entry.get("rubrique") in RUBRIQUE_BY_KEY else DEFAULT_RUBRIQUE
         summary = plain_text(entry.get("summary"))
-        source_key = _normalize_source(entry.get("source"))
-        if source_key in GENERAL_DAILIES:
-            rubrique = DEFAULT_RUBRIQUE
+        source = media.display_name(entry.get("source"))
+        source_key = _normalize_source(source)
+        forced = media.forced_rubrique(source)
+        rubrique = forced or rubrique
         existing = by_source.get(source_key) if source_key else None
         if existing is not None:
             existing["summary"] = f"{existing['summary']} {summary}".strip()
             existing["headline"] = existing["headline"] or clean_headline(plain_text(entry.get("headline")))
             existing["documents"] = existing["documents"] + list(entry.get("documents", []))
-            if rubrique == DEFAULT_RUBRIQUE:
+            if not forced and rubrique == DEFAULT_RUBRIQUE:
                 existing["rubrique"] = DEFAULT_RUBRIQUE
             continue
         notice = {
             "rubrique": rubrique,
-            "source": (entry.get("source") or "").strip(),
+            "source": source,
             "headline": clean_headline(plain_text(entry.get("headline"))),
             "summary": summary,
             "documents": list(entry.get("documents", [])),
@@ -163,19 +158,22 @@ def build_structured(*, entries, country="", date_label=""):
 
 
 def present(structured):
-    """Version prête à afficher : rubriques résolues (titre, couleur, pictogramme)."""
+    """Version prête à afficher : rubriques résolues (titre, couleur, pictogramme) et, dans
+    chaque rubrique, journaux classés du plus lu / plus fiable au moins connu (tri stable :
+    à rang égal, ordre de lecture). Appliqué au rendu, donc aussi aux revues déjà générées."""
     if not structured or structured.get("format") != FORMAT_VERSION:
         return None
     sections = []
     for section in structured.get("sections", []):
         rubrique = RUBRIQUE_BY_KEY.get(section.get("key"), RUBRIQUE_BY_KEY[DEFAULT_RUBRIQUE])
+        entries = [{**entry, "source": media.display_name(entry.get("source"))} for entry in section.get("entries", [])]
         sections.append(
             {
                 "key": rubrique["key"],
                 "title": rubrique["title"],
                 "color": rubrique["color"],
                 "icon": rubrique["icon"],
-                "entries": section.get("entries", []),
+                "entries": sorted(entries, key=lambda entry: media.rank(entry["source"])),
             }
         )
     return {

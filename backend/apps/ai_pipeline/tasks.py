@@ -42,6 +42,7 @@ from .errors import describe_error, is_configuration_error, is_retryable_error
 from .extraction import extract_text_from_image, extract_text_from_pdf
 from .matching import match_category
 from .mistral_client import MistralClient, complete_structured, get_mistral_client
+from .media import UNIDENTIFIED_PREFIX
 from .press_format import DEFAULT_RUBRIQUE, build_structured, country_label, long_french_date, match_rubrique, to_markdown
 from .prompts import build_chunk_summary_prompt, build_highlight_detection_prompt, build_press_entry_prompt
 from .schemas import ChunkSummaryResult, HighlightDetectionResult, PressEntryResult
@@ -394,7 +395,7 @@ def task_draft_review(self, job_id):
                 # Pas le nom de fichier (« WhatsApp Image 2026-10-09 at… ») : illisible dans
                 # une revue diffusée ; le n° renvoie à l'onglet « Documents ».
                 kind = "photo" if document.kind == SourceDocument.Kind.IMAGE else "document"
-                entry["source"] = f"JOURNAL NON IDENTIFIÉ ({kind} n° {i})"
+                entry["source"] = f"{UNIDENTIFIED_PREFIX} ({kind} n° {i})"
             entry["documents"] = [document.original_filename]
             cache[key] = entry
             update_step_progress(job, step_name, chunks_done=len(cache), chunks_total=max(total, 1), extra={"entries": cache})
