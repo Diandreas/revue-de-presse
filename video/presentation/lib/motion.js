@@ -250,10 +250,18 @@ export async function film({ draw, init, fonts = [], images = {}, hits = [], sam
   await Promise.all(fonts.map((f) => document.fonts.load(f, 'AaBb0123')
     .catch((e) => console.error(`font "${f}" failed to load (${e.message}): check <film>/fonts/ and index.html`))));
   const IMG = {};
+  // Many render workers decode the same images at once: under memory pressure a decode can fail.
+  // Retry, and if an image still won't load, never mark the film ready (no silently blank frames).
+  let missing = 0;
   await Promise.all(Object.entries(images).map(async ([k, src]) => {
-    const im = new Image(); im.src = src;
-    try { await im.decode(); IMG[k] = im; } catch { console.error(`image "${k}" failed to load: ${src}`); }
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const im = new Image(); im.src = attempt ? `${src}?retry=${attempt}` : src;
+      try { await im.decode(); IMG[k] = im; return; } catch { await new Promise((r) => setTimeout(r, 400 * (attempt + 1))); }
+    }
+    missing++;
+    console.error(`image "${k}" failed to load: ${src}`);
   }));
+  if (missing && RENDER) throw new Error(`${missing} image(s) failed to load: refusing to render blank frames`);
 
   const mctx = canvas.getContext('2d', { alpha: false });
   const buf = document.createElement('canvas');
