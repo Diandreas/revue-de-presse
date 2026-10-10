@@ -48,7 +48,7 @@ export default function RegisterPage() {
       badge={
         <span className="chip bg-amber-50 py-1 text-amber-800 ring-1 ring-amber-200">
           <GiftIcon className="h-3.5 w-3.5" />
-          14 jours d’essai gratuit · sans carte bancaire
+          7 jours d’essai gratuit · sans carte bancaire
         </span>
       }
       footer={

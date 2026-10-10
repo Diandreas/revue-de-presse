@@ -50,8 +50,8 @@ def starter_plan(db):
 @pytest.mark.django_db
 def test_registration_starts_a_free_trial_so_a_new_company_can_create_a_review(api_client, starter_plan, settings):
     """Régression : un compte tout juste créé recevait 403 « aucun abonnement actif » au
-    lancement de sa toute première revue (paiements en mode simulé = aucun moyen d'activer)."""
-    settings.TRIAL_DAYS = 14
+    lancement de sa toute première revue (paiements en mode simulé = aucun moyen d'activer).
+    L'essai dure 7 jours par défaut (TRIAL_DAYS)."""
     response = api_client.post(
         "/api/auth/register/",
         {
@@ -66,7 +66,7 @@ def test_registration_starts_a_free_trial_so_a_new_company_can_create_a_review(a
     subscription = Subscription.objects.get(organization__name="Presse Plus SARL")
     assert subscription.status == Subscription.Status.TRIALING
     assert subscription.plan == starter_plan
-    assert subscription.current_period_end - subscription.current_period_start == timedelta(days=14)
+    assert subscription.current_period_end - subscription.current_period_start == timedelta(days=7)
 
     api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {response.data['access']}")
     upload = api_client.post("/api/documents/", {"file": _pdf()}, format="multipart")
