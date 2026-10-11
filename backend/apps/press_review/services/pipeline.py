@@ -6,6 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from ..models import PipelineStepRun, PressReviewJob
+from ..signals import announce_status_change
 
 ALLOWED_TRANSITIONS = {
     PressReviewJob.Status.UPLOADED: [PressReviewJob.Status.TEXT_EXTRACTION],
@@ -74,6 +75,7 @@ def transition_job(job, new_status, *, error_message=""):
         job.error_message = ""  # le job repart : l'ancienne erreur n'a plus lieu d'être
 
     job.save(update_fields=["status", "progress_percent", "started_at", "completed_at", "error_message", "updated_at"])
+    announce_status_change(job, previous_status)  # e-mails « revue prête / échec », après commit
     return job
 
 
@@ -141,9 +143,11 @@ def mark_dispatch_failed(job, message):
         job = PressReviewJob.objects.select_for_update().get(pk=job.pk)
         if job.status not in startable:
             return job
+        previous_status = job.status
         job.status = PressReviewJob.Status.FAILED
         job.error_message = message
         job.save(update_fields=["status", "error_message", "updated_at"])
+        announce_status_change(job, previous_status)
     return job
 
 

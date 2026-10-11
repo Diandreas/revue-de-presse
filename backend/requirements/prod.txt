@@ -2,3 +2,6 @@
 
 gunicorn>=22.0,<23.0
 whitenoise>=6.7,<6.8
+
+# Supervision des erreurs (Django + Celery) : inactif tant que SENTRY_DSN est vide.
+sentry-sdk>=2.14,<3.0

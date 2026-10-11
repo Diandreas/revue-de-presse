@@ -1,16 +1,17 @@
-from django.db import connection
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .health import run_checks
+
 
 class HealthCheckView(APIView):
-    """Endpoint public de supervision (docker healthcheck, monitoring externe)."""
+    """Endpoint public de supervision (moniteur d'uptime externe, script de déploiement) :
+    200 si tout répond, 503 sinon (détail par composant dans `checks`)."""
 
     permission_classes = [AllowAny]
     authentication_classes = []
 
     def get(self, request):
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-        return Response({"status": "ok"})
+        report = run_checks()
+        return Response(report, status=200 if report["status"] == "ok" else 503)

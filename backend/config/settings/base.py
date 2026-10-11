@@ -172,6 +172,9 @@ CELERY_TASK_TIME_LIMIT = 20 * 60
 # Une tâche n'est acquittée qu'à la fin : si le worker meurt en plein traitement, elle
 # est rejouée (les étapes sont idempotentes) au lieu d'être perdue en silence.
 CELERY_TASK_ACKS_LATE = True
+# … y compris quand le processus enfant est tué (OOM, redémarrage PM2) : sans ceci, Celery
+# acquitte quand même la tâche et le job reste « en cours » pour toujours.
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 
 if CELERY_BROKER_URL.startswith("filesystem://"):
@@ -199,11 +202,20 @@ if CELERY_TASK_ALWAYS_EAGER:
     CELERY_TASK_EAGER_PROPAGATES = True
 
 # --- Email ---
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+# Fournisseur transactionnel (Brevo, Mailjet, SES…) en SMTP authentifié. Les envois
+# partent par la tâche Celery apps.notifications.tasks.send_email (réessais + journal).
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
 EMAIL_HOST = env("EMAIL_HOST", default="localhost")
 EMAIL_PORT = env.int("EMAIL_PORT", default=1025)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+# STARTTLS (port 587) OU SSL implicite (port 465) : jamais les deux à la fois.
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=False)
+EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
+# Sans délai, un serveur SMTP muet bloque le worker (ou la requête) indéfiniment.
+EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=10)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="no-reply@revue-de-presse.local")
+SERVER_EMAIL = env("SERVER_EMAIL", default=DEFAULT_FROM_EMAIL)
 
 # --- Mistral ---
 MISTRAL_API_KEY = env("MISTRAL_API_KEY", default="")
@@ -238,6 +250,22 @@ TRIAL_PLAN_CODE = env("TRIAL_PLAN_CODE", default="starter")
 SUBSCRIPTION_MOBILE_MONEY_GRACE_DAYS = 5
 SUBSCRIPTION_BANK_TRANSFER_GRACE_DAYS = 7
 SUBSCRIPTION_RENEWAL_REMINDER_DAYS_BEFORE = (3, 1)
+
+# --- Notifications & supervision (apps.notifications) ---
+# Destinataires des alertes internes (inscription, abonnements à renouveler, revue en
+# échec). Vide -> e-mails des superusers actifs.
+STAFF_NOTIFICATION_EMAILS = env.list("STAFF_NOTIFICATION_EMAILS", default=[])
+STAFF_NOTIFY_JOB_FAILURES = env.bool("STAFF_NOTIFY_JOB_FAILURES", default=True)
+# Paiements gérés à la main : le client contacte l'équipe sur WhatsApp.
+SUPPORT_WHATSAPP_NUMBER = env("SUPPORT_WHATSAPP_NUMBER", default="+237 693 42 79 13")
+# Base des liens vers /admin/ dans les e-mails au staff (même domaine que l'appli en prod).
+ADMIN_BASE_URL = env("ADMIN_BASE_URL", default=FRONTEND_BASE_URL)
+TRIAL_REMINDER_DAYS_BEFORE = env.int("TRIAL_REMINDER_DAYS_BEFORE", default=2)
+STAFF_RENEWAL_ALERT_DAYS = env.int("STAFF_RENEWAL_ALERT_DAYS", default=7)
+# Un job « en cours » sans aucune progression depuis ce délai est passé en FAILED par la
+# tâche de surveillance (« Réessayer » redevient possible). Les relances automatiques
+# attendent au plus ~2 min et chaque document/extrait fait avancer la progression.
+PIPELINE_STUCK_AFTER_MINUTES = env.int("PIPELINE_STUCK_AFTER_MINUTES", default=30)
 
 LOGGING = {
     "version": 1,

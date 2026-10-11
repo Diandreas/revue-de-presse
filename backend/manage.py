@@ -1,10 +1,12 @@
 #!/usr/bin/env python
-import os
 import sys
 
 
 def main():
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.dev")
+    # Variable d'environnement, puis .env, puis dev avec avertissement : config/bootstrap.py.
+    from config.bootstrap import configure_settings_module
+
+    configure_settings_module()
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

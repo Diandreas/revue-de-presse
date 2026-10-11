@@ -34,5 +34,10 @@ CAMPAY_APP_PASSWORD = ""
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+# Jamais d'identifiants SMTP réels ni d'adresses du staff réelles pendant pytest (même si
+# le .env partagé en contient) : les tests fixent leurs propres destinataires.
+EMAIL_HOST_USER = ""
+EMAIL_HOST_PASSWORD = ""
+STAFF_NOTIFICATION_EMAILS = []
 
 MEDIA_ROOT = BASE_DIR / "test_mediafiles"  # noqa: F405
