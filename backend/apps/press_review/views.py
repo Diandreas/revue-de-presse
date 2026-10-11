@@ -112,7 +112,7 @@ class SourceDocumentListCreateView(OrganizationContextMixin, generics.ListCreate
             organization=request.organization,
             uploaded_by=request.user,
             file=f,
-            original_filename=f.name,
+            original_filename=f.original_name,
             kind=classify_upload_kind(f),
         )
         return Response(

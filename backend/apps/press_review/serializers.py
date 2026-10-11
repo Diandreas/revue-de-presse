@@ -1,26 +1,16 @@
-import os
-
 from rest_framework import serializers
+
+from apps.core.uploads import SOURCE_DOCUMENT_TYPES, VerifiedFileField
 
 from .models import DetectionCategory, GeneratedReview, Highlight, PipelineStepRun, PressReviewJob, SourceDocument
 
 MAX_UPLOAD_SIZE_BYTES = 30 * 1024 * 1024  # 30 Mo
 
-PDF_CONTENT_TYPE = "application/pdf"
-IMAGE_CONTENT_TYPES = {
-    "image/jpeg", "image/png", "image/webp", "image/tiff", "image/bmp", "image/gif", "image/heic", "image/heif",
-}
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".bmp", ".gif", ".heic", ".heif"}
-
-
-def _upload_extension(uploaded_file):
-    return os.path.splitext(uploaded_file.name or "")[1].lower()
-
 
 def classify_upload_kind(uploaded_file):
-    """Retourne 'pdf' ou 'image'. Suppose que validate_file a déjà validé le type."""
-    ext = _upload_extension(uploaded_file)
-    if uploaded_file.content_type in IMAGE_CONTENT_TYPES or ext in IMAGE_EXTENSIONS:
+    """Retourne 'pdf' ou 'image' d'après le type DÉTECTÉ par SourceDocumentUploadSerializer
+    (jamais d'après le nom ou le Content-Type déclarés par le navigateur)."""
+    if uploaded_file.file_type.is_image:
         return SourceDocument.Kind.IMAGE
     return SourceDocument.Kind.PDF
 
@@ -36,19 +26,13 @@ class DetectionCategorySerializer(serializers.ModelSerializer):
 
 
 class SourceDocumentUploadSerializer(serializers.Serializer):
-    file = serializers.FileField()
-
-    def validate_file(self, f):
-        ext = _upload_extension(f)
-        is_pdf = f.content_type == PDF_CONTENT_TYPE or ext == ".pdf"
-        is_image = f.content_type in IMAGE_CONTENT_TYPES or ext in IMAGE_EXTENSIONS
-        if not (is_pdf or is_image):
-            raise serializers.ValidationError(
-                "Formats acceptés : PDF, ou photo (JPG, PNG, WebP, TIFF, HEIC)."
-            )
-        if f.size > MAX_UPLOAD_SIZE_BYTES:
-            raise serializers.ValidationError("Le fichier dépasse la taille maximale de 30 Mo.")
-        return f
+    # Type réel lu dans les octets (cf. apps.core.uploads) ; le fichier validé porte
+    # `original_name` (nom choisi par l'utilisateur) et l'extension du type détecté.
+    file = VerifiedFileField(
+        allowed_types=SOURCE_DOCUMENT_TYPES,
+        max_size=MAX_UPLOAD_SIZE_BYTES,
+        formats_message="Formats acceptés : PDF, ou photo (JPG, PNG, WebP, HEIC).",
+    )
 
 
 class SourceDocumentSerializer(serializers.ModelSerializer):
