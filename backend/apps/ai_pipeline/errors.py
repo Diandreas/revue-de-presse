@@ -17,17 +17,45 @@ import re
 from pydantic import ValidationError
 
 
-class OcrUnavailableError(Exception):
-    """Le moteur de lecture (Tesseract, Poppler, ou le service Mistral utilisé pour lire les
-    photos) est absent ou mal configuré sur le SERVEUR. Ce n'est pas un problème du fichier
-    de l'utilisateur : il ne faut ni l'avaler (texte vide silencieux) ni le présenter comme
-    « aucun texte lisible » — le job doit échouer franchement avec un message d'administrateur.
+class ServerConfigurationError(Exception):
+    """Problème de configuration du SERVEUR (moteur absent, clé d'API manquante…), jamais
+    imputable au fichier de l'utilisateur : le job échoue franchement avec un message
+    d'administrateur, sans relance automatique.
 
     `user_message` : message dédié à l'interface (sinon un message générique est utilisé)."""
 
     def __init__(self, message, *, user_message=None):
         super().__init__(message)
         self.user_message = user_message
+
+
+class OcrUnavailableError(ServerConfigurationError):
+    """Le moteur de lecture (Tesseract, Poppler, ou le service Mistral utilisé pour lire les
+    photos) est absent ou mal configuré sur le SERVEUR. Ce n'est pas un problème du fichier
+    de l'utilisateur : il ne faut ni l'avaler (texte vide silencieux) ni le présenter comme
+    « aucun texte lisible » — le job doit échouer franchement avec un message d'administrateur."""
+
+
+class AIUnavailableError(ServerConfigurationError):
+    """Service d'IA non configuré (clé Mistral absente) sur un serveur où le client factice
+    est interdit : un client payant ne doit jamais recevoir une revue « [MOCK] »."""
+
+
+class DocumentRejectedError(Exception):
+    """Ce fichier-là ne peut pas être analysé (ex : PDF trop long). Le document est marqué
+    en échec avec `user_message`, la revue continue avec les autres."""
+
+    def __init__(self, message, *, user_message=None):
+        super().__init__(message)
+        self.user_message = user_message or message
+
+
+class AIRateLimitBusyError(Exception):
+    """Le limiteur de débit interne (global ou par organisation, cf. ratelimit.py) n'a pas
+    libéré de place dans le délai d'attente autorisé. Traité comme un 429 : l'étape est
+    relancée plus tard par Celery au lieu d'occuper un worker."""
+
+    status_code = 429
 
 
 RETRYABLE_STATUS_CODES = frozenset({408, 425, 429, 500, 502, 503, 504})
@@ -90,7 +118,7 @@ def is_retryable_error(exc):
 
 def is_configuration_error(exc):
     """Problème de configuration du serveur (à signaler à l'administrateur), pas d'un fichier."""
-    return isinstance(exc, OcrUnavailableError) or is_quota_blocked(exc) or status_code_of(exc) in (401, 403)
+    return isinstance(exc, ServerConfigurationError) or is_quota_blocked(exc) or status_code_of(exc) in (401, 403)
 
 
 def describe_error(exc, *, retried=False):
@@ -101,6 +129,11 @@ def describe_error(exc, *, retried=False):
             "Le moteur de lecture des photos et PDF scannés (OCR) n'est pas disponible sur le "
             "serveur. Ce n'est pas un problème de vos fichiers : contactez l'administrateur "
             "de la plateforme."
+        )
+    if isinstance(exc, ServerConfigurationError):
+        return exc.user_message or (
+            "Le service d'IA n'est pas correctement configuré sur le serveur. Ce n'est pas un "
+            "problème de vos fichiers : contactez l'administrateur de la plateforme."
         )
     if isinstance(exc, ValidationError):
         return (

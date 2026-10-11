@@ -112,7 +112,7 @@ def plain_text(text):
 
 
 def build_structured(*, entries, country="", date_label=""):
-    """`entries` : dicts {source, rubrique, headline, summary, documents} dans l'ordre de
+    """`entries` : dicts {source, rubrique, headline, summary, documents, document_ids} dans l'ordre de
     lecture. Toutes les pages d'un même journal sont fusionnées en une seule notice, comme
     dans une revue rédigée à la main. Un journal connu (media.py) prend son nom de référence
     et sa rubrique, quel que soit le sujet de sa une ; sinon, un journal classé « presse
@@ -132,6 +132,7 @@ def build_structured(*, entries, country="", date_label=""):
             existing["summary"] = f"{existing['summary']} {summary}".strip()
             existing["headline"] = existing["headline"] or clean_headline(plain_text(entry.get("headline")))
             existing["documents"] = existing["documents"] + list(entry.get("documents", []))
+            existing["document_ids"] = existing["document_ids"] + list(entry.get("document_ids", []))
             if not forced and rubrique == DEFAULT_RUBRIQUE:
                 existing["rubrique"] = DEFAULT_RUBRIQUE
             continue
@@ -141,6 +142,9 @@ def build_structured(*, entries, country="", date_label=""):
             "headline": clean_headline(plain_text(entry.get("headline"))),
             "summary": summary,
             "documents": list(entry.get("documents", [])),
+            # Ids des documents (noms de fichiers ambigus) : relient chaque point clé à son
+            # journal dans l'annexe et l'application (cf. attribution.py).
+            "document_ids": list(entry.get("document_ids", [])),
         }
         notices.append(notice)
         if source_key:

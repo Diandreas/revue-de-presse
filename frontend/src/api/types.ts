@@ -131,6 +131,8 @@ export interface Highlight {
   source_document: string | null
   /** Masqué par l'utilisateur (faux positif) : absent de l'annexe des exports. */
   hidden: boolean
+  /** Journal dont provient le point clé (« CAMEROON TRIBUNE »), null si inconnu. */
+  source_name?: string | null
 }
 
 /** Notice d'un journal dans la revue de presse. */

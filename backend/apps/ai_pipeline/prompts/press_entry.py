@@ -1,4 +1,5 @@
 from ..press_format import RUBRIQUES
+from .source_text import SOURCE_GUARD, safe_filename, wrap_source
 
 # Au-delà, le début du texte suffit à identifier le journal et sa une ; la suite est
 # couverte par les résumés des extraits (étape précédente).
@@ -30,14 +31,16 @@ def build_press_entry_prompt(*, filename, text, chunk_summaries):
         "« Le journal évoque aussi… »). De 1 à 5 phrases selon la quantité d'informations : une "
         "page avec un seul article tient en 1 à 3 phrases. Garde les chiffres, noms, fonctions "
         "et dates exacts. N'invente rien, ne commente pas, ne conclus pas, ne signale pas ce qui "
-        "manque et ne répète pas le titre."
+        "manque et ne répète pas le titre.\n\n"
+        f"{SOURCE_GUARD}"
     )
     text = text or ""
-    user_prompt = f'Fichier : {filename}\n\nTexte lu sur la page :\n"""\n{text[:MAX_TEXT_CHARS]}\n"""'
+    user_prompt = f"Fichier : {safe_filename(filename)}\n\nTexte lu sur la page :\n{wrap_source(text[:MAX_TEXT_CHARS])}"
     # Les résumés ne servent qu'à couvrir la fin d'un long document (PDF de plusieurs pages) :
     # pour une photo de une, le texte complet suffit, et des résumés déjà reformulés
-    # n'apportent que des risques de paraphrase inexacte.
+    # n'apportent que des risques de paraphrase inexacte. Ils dérivent du texte source : même
+    # bloc délimité, même statut de simple donnée.
     if len(text) > MAX_TEXT_CHARS:
         summaries_block = "\n".join(f"- {s}" for s in chunk_summaries if s) or "(aucun)"
-        user_prompt += f"\n\nRésumés de l'ensemble des articles du document :\n{summaries_block}"
+        user_prompt += f"\n\nRésumés de l'ensemble des articles du document :\n{wrap_source(summaries_block)}"
     return system_prompt, user_prompt

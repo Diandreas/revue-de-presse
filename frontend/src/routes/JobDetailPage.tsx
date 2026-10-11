@@ -394,7 +394,10 @@ function HighlightsPanel({
           <HighlightCard
             key={highlight.id}
             highlight={highlight}
-            sourceName={highlight.source_document ? documentNames.get(highlight.source_document) : undefined}
+            sourceName={
+              highlight.source_name ??
+              (highlight.source_document ? documentNames.get(highlight.source_document) : undefined)
+            }
             categories={activeCategories}
             onToggleHidden={toggleHidden}
             onChangeCategory={changeCategory}

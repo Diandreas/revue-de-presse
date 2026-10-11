@@ -56,10 +56,18 @@ class _MangledNamesClient(FakeMistralClient):
         if kwargs.get("response_hint") == "highlight_detection":
             return {"highlights": [
                 {"category_name": "into_x_potentielle", "excerpt": "une rumeur sans fondement", "explanation": "e"},
-                {"category_name": "legal_risk", "excerpt": "propos diffamatoires", "explanation": "e"},
+                {"category_name": "legal_risk", "excerpt": "propos diffamatoires visant le directeur", "explanation": "e"},
                 {"category_name": "Catégorie inventée", "excerpt": "autre chose", "explanation": "e"},
             ]}
         return super().complete_json(**kwargs)
+
+
+# Les citations sont vérifiées dans le texte source (grounding.py) : il doit les contenir.
+ARTICLE_LINES = [
+    "Un article de presse avec suffisamment de texte reel.",
+    "Il relaie une rumeur sans fondement et des",
+    "propos diffamatoires visant le directeur.",
+]
 
 
 @pytest.mark.django_db
@@ -70,7 +78,7 @@ def test_highlights_with_mangled_category_names_are_kept_and_the_rest_is_traced(
     job = PressReviewJob.objects.create(organization=organization, created_by=user)
     SourceDocument.objects.create(
         organization=organization, job=job, uploaded_by=user,
-        file=SimpleUploadedFile("a.pdf", make_minimal_pdf_bytes(["Un article de presse avec suffisamment de texte reel."]), content_type="application/pdf"),
+        file=SimpleUploadedFile("a.pdf", make_minimal_pdf_bytes(ARTICLE_LINES), content_type="application/pdf"),
         original_filename="a.pdf", kind="pdf",
     )
 
@@ -79,6 +87,9 @@ def test_highlights_with_mangled_category_names_are_kept_and_the_rest_is_traced(
     job.refresh_from_db()
     assert job.status == PressReviewJob.Status.REVIEW_READY
     kept = {h.category.name: h.excerpt for h in job.highlights.select_related("category")}
-    assert kept == {"Intox potentielle": "une rumeur sans fondement", "Risque juridique": "propos diffamatoires"}
+    assert kept == {
+        "Intox potentielle": "une rumeur sans fondement",
+        "Risque juridique": "propos diffamatoires visant le directeur",
+    }
     step = PipelineStepRun.objects.get(job=job, step_name=PipelineStepRun.StepName.HIGHLIGHT_DETECTION)
     assert step.result_summary["unmatched_categories"] == ["Catégorie inventée"]  # tracé, pas jeté en silence

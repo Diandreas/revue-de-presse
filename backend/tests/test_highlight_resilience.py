@@ -6,6 +6,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 
 from apps.ai_pipeline import tasks as pipeline_tasks
 from apps.ai_pipeline.mistral_client import FakeMistralClient
+from apps.ai_pipeline.prompts import unwrap_source
 from apps.ai_pipeline.schemas import HighlightDetectionResult
 from apps.ai_pipeline.tasks import run_press_review_pipeline
 from apps.press_review.models import DetectionCategory, PipelineStepRun, PressReviewJob, SourceDocument
@@ -38,7 +39,8 @@ def _job_with_documents(organization, user, count):
 
 
 class _OneUnreadableChunkClient(FakeMistralClient):
-    """Le 2e extrait renvoie deux fois une réponse inexploitable (avant et après relance)."""
+    """Le 2e extrait renvoie deux fois une réponse inexploitable (avant et après relance).
+    Les autres citent leur extrait tel quel (les citations sont vérifiées dans le texte)."""
 
     def __init__(self):
         self.calls = 0
@@ -48,7 +50,8 @@ class _OneUnreadableChunkClient(FakeMistralClient):
             self.calls += 1
             if self.calls in (2, 3):
                 return {"highlights": "Aucun point clé."}  # texte au lieu d'une liste
-            return {"highlights": [{"category_name": "Intox potentielle", "excerpt": f"extrait {self.calls}"}]}
+            excerpt = unwrap_source(kwargs["user_prompt"])
+            return {"highlights": [{"category_name": "Intox potentielle", "excerpt": excerpt}]}
         return super().complete_json(**kwargs)
 
 

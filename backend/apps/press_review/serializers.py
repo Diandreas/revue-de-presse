@@ -89,14 +89,22 @@ class JobCreateSerializer(serializers.Serializer):
 
 class HighlightSerializer(serializers.ModelSerializer):
     category = DetectionCategorySerializer(read_only=True)
+    # Journal dont provient le point clé (« CAMEROON TRIBUNE »), null si inconnu : fourni par
+    # la vue dans le contexte `source_names` (cf. ai_pipeline.attribution).
+    source_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Highlight
         fields = [
             "id", "category", "excerpt", "explanation", "confidence", "page_number", "order", "source_document",
             "hidden",
+            "source_name",
         ]
         read_only_fields = fields
+
+    def get_source_name(self, obj):
+        names = self.context.get("source_names") or {}
+        return names.get(str(obj.source_document_id)) if obj.source_document_id else None
 
 
 class GeneratedReviewSerializer(serializers.ModelSerializer):

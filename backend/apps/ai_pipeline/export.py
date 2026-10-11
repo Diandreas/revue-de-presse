@@ -28,6 +28,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Mm, Pt, RGBColor
 
+from .attribution import newspaper_names, source_label
 from .press_format import entry_paragraph, present
 
 logger = logging.getLogger(__name__)
@@ -132,13 +133,11 @@ def _safe_color(value, default="#64748B"):
     return value if re.fullmatch(r"#[0-9a-fA-F]{6}", value or "") else default
 
 
-def _source_label(highlight):
-    if highlight.source_document is None:
-        return ""
-    label = highlight.source_document.original_filename
-    if highlight.page_number and highlight.source_document.kind == "pdf":
-        label += f" · page {highlight.page_number}"
-    return label
+def _source_labeler(review):
+    """Source d'un point clé dans l'annexe : le journal (« CAMEROON TRIBUNE · page 2 »),
+    pas le nom du fichier téléversé (« WhatsApp Image… ») — cf. attribution.py."""
+    names = newspaper_names(review.job, review)
+    return lambda highlight: source_label(highlight, names)
 
 
 # --------------------------------------------------------------------------- PDF
@@ -213,6 +212,7 @@ def _build_pdf_html(review):
 
     groups = _grouped_highlights(review)
     if groups:
+        label_of = _source_labeler(review)
         parts.append(
             "<section class='annex'><h2>Points clés détectés</h2>"
             "<p class='intro'>Passages repérés par l'IA dans les documents, classés selon vos catégories de détection.</p>"
@@ -224,7 +224,7 @@ def _build_pdf_html(review):
                 f"<span class='count'>({len(items)})</span></h3>"
             )
             for highlight in items:
-                source = _source_label(highlight)
+                source = label_of(highlight)
                 parts.append(
                     f"<div class='hl' style='border-left-color:{color}'>"
                     f"<p class='excerpt'>« {esc(highlight.excerpt)} »</p>"
@@ -439,6 +439,7 @@ def _render_docx(review):
 
     groups = _grouped_highlights(review)
     if groups:
+        label_of = _source_labeler(review)
         document.add_page_break()
         document.add_heading("Points clés détectés", level=1)
         intro = document.add_paragraph(
@@ -457,7 +458,7 @@ def _render_docx(review):
                     explanation = document.add_paragraph(highlight.explanation)
                     explanation.paragraph_format.left_indent = Pt(18)
                     explanation.runs[0].font.size = Pt(10)
-                source = _source_label(highlight)
+                source = label_of(highlight)
                 if source:
                     src = document.add_paragraph(source)
                     src.paragraph_format.left_indent = Pt(18)

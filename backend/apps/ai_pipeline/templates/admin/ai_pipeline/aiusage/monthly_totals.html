@@ -1,0 +1,63 @@
+{% extends "admin/base_site.html" %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">Accueil</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:ai_pipeline_aiusage_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; Totaux mensuels
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <p>
+    Appels au service d'IA (Mistral) sur les 12 derniers mois, par organisation. Le coût est une
+    <strong>estimation</strong> à partir des jetons consommés et de tarifs indicatifs
+    (variable <code>AI_TOKEN_PRICES_USD</code> ; à vérifier sur la page de tarifs Mistral).
+  </p>
+  {% for month in months %}
+    <h2>{{ month.month|date:"F Y"|capfirst }}</h2>
+    <table style="width:100%; margin-bottom:24px">
+      <thead>
+        <tr>
+          <th>Organisation</th>
+          <th style="text-align:right">Revues</th>
+          <th style="text-align:right">Appels</th>
+          <th style="text-align:right">dont échecs</th>
+          <th style="text-align:right">Jetons entrée</th>
+          <th style="text-align:right">Jetons sortie</th>
+          <th style="text-align:right">Coût estimé ($)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in month.rows %}
+          <tr>
+            <td>{{ row.organization }}</td>
+            <td style="text-align:right">{{ row.jobs }}</td>
+            <td style="text-align:right">{{ row.calls }}</td>
+            <td style="text-align:right">{{ row.failed }}</td>
+            <td style="text-align:right">{{ row.prompt_tokens }}</td>
+            <td style="text-align:right">{{ row.completion_tokens }}</td>
+            <td style="text-align:right">
+              {{ row.cost_usd|floatformat:4 }}{% if row.unpriced_models %} <span title="Modèles sans tarif : {{ row.unpriced_models|join:', ' }}">*</span>{% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        <tr style="font-weight:bold">
+          <td>{{ month.total.organization }}</td>
+          <td style="text-align:right">{{ month.total.jobs }}</td>
+          <td style="text-align:right">{{ month.total.calls }}</td>
+          <td style="text-align:right">{{ month.total.failed }}</td>
+          <td style="text-align:right">{{ month.total.prompt_tokens }}</td>
+          <td style="text-align:right">{{ month.total.completion_tokens }}</td>
+          <td style="text-align:right">{{ month.total.cost_usd|floatformat:4 }}</td>
+        </tr>
+      </tbody>
+    </table>
+  {% empty %}
+    <p>Aucun appel IA enregistré sur la période.</p>
+  {% endfor %}
+  <p class="help">* une partie des appels utilise un modèle sans tarif connu : son coût n'est pas compté.</p>
+</div>
+{% endblock %}

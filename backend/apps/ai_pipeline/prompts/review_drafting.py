@@ -1,3 +1,6 @@
+from .source_text import SOURCE_GUARD, wrap_source
+
+
 def build_review_drafting_prompt(*, document_titles, chunk_summaries, highlights):
     summaries_block = "\n".join(f"- {s}" for s in chunk_summaries) or "Aucun résumé disponible."
     highlights_block = (
@@ -16,9 +19,11 @@ def build_review_drafting_prompt(*, document_titles, chunk_summaries, highlights
         "'Résumé exécutif', une section par catégorie de point saillant détecté, une "
         "conclusion. Réponds uniquement en JSON valide de la forme "
         '{"summary_markdown": "..."} où la valeur est UNE SEULE chaîne Markdown '
-        "(jamais une liste ni un objet)."
+        "(jamais une liste ni un objet).\n\n"
+        f"{SOURCE_GUARD}"
     )
-    user_prompt = (
+    # Résumés et extraits dérivent des documents du client : même statut de simple donnée.
+    user_prompt = wrap_source(
         f"Documents source : {titles_block}\n\n"
         f"Résumés des extraits :\n{summaries_block}\n\n"
         f"Points saillants détectés :\n{highlights_block}"

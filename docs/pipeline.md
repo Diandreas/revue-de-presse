@@ -137,7 +137,34 @@ de loi n'est codé en dur, tout est éditable via `/admin/` (voir
 `backend/apps/ai_pipeline/mistral_client.py:get_mistral_client()` bascule automatiquement
 sur `FakeMistralClient` (sortie factice labellisée `[MOCK]`) si `MISTRAL_API_KEY` est
 vide — le pipeline reste démontrable sans clé réelle, et les tests n'appellent jamais
-l'API réseau.
+l'API réseau. Hors DEBUG, ce repli n'est permis que si `MISTRAL_ALLOW_FAKE_CLIENT=true` :
+sinon la revue échoue avec un message d'administrateur (`AIUnavailableError`) et
+`manage.py check` avertit (`ai_pipeline.W001`).
+
+### Fiabilité et coût (`apps/ai_pipeline`)
+
+- **Points clés ancrés** (`grounding.py`) : chaque extrait est recherché (approché, tolérant
+  au bruit OCR) dans le texte de l'extrait analysé ; sont écartés les extraits introuvables,
+  trop courts, réduits au nom d'un journal, ou de confiance < `HIGHLIGHT_MIN_CONFIDENCE`. Les
+  écarts sont comptés dans `result_summary.discarded_highlights` de l'étape. Détection sur
+  `MISTRAL_HIGHLIGHT_MODEL` (ministral-14b) à `HIGHLIGHT_TEMPERATURE` (0).
+- **Journal du point clé** (`attribution.py`) : l'annexe PDF/Word et le champ `source_name`
+  de `GET /api/jobs/{id}/highlights/` citent le journal (notices de la revue) au lieu du
+  nom du fichier.
+- **Injection de consignes** (`prompts/source_text.py`) : le texte des documents est placé
+  entre `<<<DEBUT_TEXTE_SOURCE>>>` et `<<<FIN_TEXTE_SOURCE>>>`, et chaque prompt système
+  demande d'ignorer toute consigne qui s'y trouverait.
+- **Mesure** (`usage.py`, modèle `AIUsage`) : chaque appel SDK (organisation, revue, étape,
+  modèle, jetons, durée, échec) ; admin « Appels IA » + « Totaux mensuels par organisation ».
+- **Limiteur de débit** (`ratelimit.py`) : compteurs par minute global et par organisation
+  dans le cache Django (Redis en prod) ; au-delà de `AI_RATE_LIMIT_MAX_WAIT_SECONDS`,
+  l'étape est relancée par Celery comme sur un 429.
+- **Plafonds** (`limits.py`) : documents et pages par revue selon la formule
+  (`AI_REVIEW_LIMITS`), pages max d'un PDF (`AI_MAX_PDF_PAGES`), refus clair à la création.
+- **Gros PDF** : rendu et OCR page par page (`ocr.iter_pdf_page_images`), progression
+  mémorisée sur le document ; une relance ne relit pas les pages déjà lues.
+- **Relances économes** : résumés (`summary_cache`) et réponses de détection
+  (`detection_cache`) sont mis en cache par empreinte de prompt dans le résultat de l'étape.
 
 ## Export
 

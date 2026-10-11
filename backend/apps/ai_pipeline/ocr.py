@@ -33,6 +33,7 @@ TESSERACT_LANGUAGES = "fra"
 MAX_TESSERACT_EDGE = 3000  # px : au-delà, Tesseract est lent sans gain de qualité
 MAX_VISION_EDGE = 2000  # px : suffisant pour un journal, limite le poids envoyé et le coût
 VISION_JPEG_QUALITY = 85
+PDF_RENDER_DPI = 200  # défaut de pdf2image : lisible pour l'OCR, ~12 Mo par page A4 en mémoire
 
 # Messages Tesseract signalant un problème d'installation (données de langue absentes)
 # et non un problème propre à l'image traitée.
@@ -94,9 +95,18 @@ def get_ocr_engine():
     raise OcrUnavailableError(f"OCR_ENGINE inconnu : « {choice} » (valeurs : auto, mistral, tesseract).")
 
 
-def pdf_pages_as_images(file_path):
-    """Pages d'un PDF scanné sous forme d'images (nécessite Poppler)."""
-    try:
-        return convert_from_path(file_path)
-    except PDFInfoNotInstalledError as exc:
-        raise OcrUnavailableError("Poppler (pdftoppm) n'est pas installé ou introuvable dans le PATH.") from exc
+def iter_pdf_page_images(file_path, *, page_count, first_page=1, dpi=PDF_RENDER_DPI):
+    """Pages d'un PDF scanné rendues en images UNE PAR UNE (nécessite Poppler) : une seule
+    page en mémoire à la fois. Convertir tout le PDF d'un coup (ancienne version) chargeait
+    toutes les pages — plusieurs Go pour un PDF de quelques centaines de pages, sur un VPS
+    partagé. Produit (numéro de page, image) ; l'image est fermée après usage."""
+    for number in range(first_page, page_count + 1):
+        try:
+            images = convert_from_path(file_path, dpi=dpi, first_page=number, last_page=number)
+        except PDFInfoNotInstalledError as exc:
+            raise OcrUnavailableError("Poppler (pdftoppm) n'est pas installé ou introuvable dans le PATH.") from exc
+        for image in images:
+            try:
+                yield number, image
+            finally:
+                image.close()
