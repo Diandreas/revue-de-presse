@@ -196,10 +196,15 @@ class CamPayWebhookView(APIView):
     authentication_classes = []
 
     def post(self, request):
+        import hmac
+
         from django.conf import settings as django_settings
 
+        # Sans secret configuré (CamPay désactivé), le webhook est fermé : sinon n'importe qui
+        # pourrait « confirmer » un paiement et s'offrir un abonnement.
+        expected = django_settings.CAMPAY_WEBHOOK_SECRET
         provided_secret = request.headers.get("X-Webhook-Secret", "")
-        if django_settings.CAMPAY_WEBHOOK_SECRET and provided_secret != django_settings.CAMPAY_WEBHOOK_SECRET:
+        if not expected or not hmac.compare_digest(provided_secret.encode(), expected.encode()):
             raise PermissionDenied("Signature de webhook invalide.")
         CamPayProvider().handle_webhook(payload=request.data)
         return Response(status=200)

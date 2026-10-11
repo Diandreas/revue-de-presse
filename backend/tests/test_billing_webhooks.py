@@ -134,3 +134,72 @@ def test_stripe_subscription_deleted_cancels_subscription():
 
     subscription.refresh_from_db()
     assert subscription.status == Subscription.Status.CANCELED
+
+
+
+def _invoice(provider, reference, status=Invoice.Status.PENDING):
+    org = OrganizationFactory()
+    plan = PlanFactory()
+    subscription = SubscriptionFactory(organization=org, plan=plan, provider=provider, status=Subscription.Status.INCOMPLETE)
+    return Invoice.objects.create(
+        organization=org, subscription=subscription, provider=provider, provider_reference=reference, status=status,
+        amount=plan.price_amount, period_start=timezone.now(), period_end=timezone.now() + timedelta(days=30),
+    )
+
+
+@pytest.mark.django_db
+def test_campay_webhook_is_closed_when_no_secret_is_configured(api_client, settings):
+    """Faille constatée en prod : secret vide = aucune vérification, n'importe qui « payait »."""
+    settings.CAMPAY_WEBHOOK_SECRET = ""
+    invoice = _invoice(Subscription.Provider.BANK_TRANSFER, "")
+
+    response = api_client.post("/api/billing/webhooks/campay/", {"external_reference": "", "status": "SUCCESSFUL"}, format="json")
+
+    assert response.status_code == 403
+    invoice.refresh_from_db()
+    assert invoice.status == Invoice.Status.PENDING
+
+
+@pytest.mark.django_db
+def test_campay_webhook_rejects_a_wrong_secret(api_client, settings):
+    settings.CAMPAY_WEBHOOK_SECRET = "s3cret"
+    invoice = _invoice(Subscription.Provider.MOBILE_MONEY, "ref-1")
+
+    response = api_client.post(
+        "/api/billing/webhooks/campay/", {"external_reference": "ref-1", "status": "SUCCESSFUL"},
+        format="json", HTTP_X_WEBHOOK_SECRET="nope",
+    )
+
+    assert response.status_code == 403
+    invoice.refresh_from_db()
+    assert invoice.status == Invoice.Status.PENDING
+
+
+@pytest.mark.django_db
+def test_campay_webhook_with_the_secret_pays_the_pending_mobile_money_invoice(api_client, settings):
+    settings.CAMPAY_WEBHOOK_SECRET = "s3cret"
+    invoice = _invoice(Subscription.Provider.MOBILE_MONEY, "ref-2")
+
+    response = api_client.post(
+        "/api/billing/webhooks/campay/", {"external_reference": "ref-2", "status": "SUCCESSFUL"},
+        format="json", HTTP_X_WEBHOOK_SECRET="s3cret",
+    )
+
+    assert response.status_code == 200
+    invoice.refresh_from_db()
+    assert invoice.status == Invoice.Status.PAID
+
+
+@pytest.mark.django_db
+def test_campay_webhook_never_settles_bank_transfer_paid_or_unreferenced_invoices():
+    transfer = _invoice(Subscription.Provider.BANK_TRANSFER, "")
+    paid = _invoice(Subscription.Provider.MOBILE_MONEY, "ref-paid", status=Invoice.Status.PAID)
+
+    assert CamPayProvider().handle_webhook(payload={"external_reference": "", "status": "SUCCESSFUL"}) is None
+    assert CamPayProvider().handle_webhook(payload={"status": "SUCCESSFUL"}) is None
+    assert CamPayProvider().handle_webhook(payload={"external_reference": "ref-paid", "status": "FAILED"}) is None
+
+    transfer.refresh_from_db()
+    paid.refresh_from_db()
+    assert transfer.status == Invoice.Status.PENDING
+    assert paid.status == Invoice.Status.PAID

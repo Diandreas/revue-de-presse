@@ -86,10 +86,23 @@ class CamPayProvider(SubscriptionProvider):
         return None
 
     def handle_webhook(self, *, payload):
-        reference = payload.get("external_reference")
-        invoice = Invoice.objects.filter(provider_reference=reference).select_related("subscription").first()
+        reference = str(payload.get("external_reference") or "").strip()
+        if not reference:
+            logger.warning("Webhook CamPay sans référence : ignoré.")
+            return None
+        # Seule une facture Mobile Money encore en attente peut être soldée par CamPay (une
+        # facture de virement ou déjà payée ne doit jamais l'être), et une seule fois.
+        invoice = (
+            Invoice.objects.filter(
+                provider=Subscription.Provider.MOBILE_MONEY,
+                provider_reference=reference,
+                status=Invoice.Status.PENDING,
+            )
+            .select_related("subscription")
+            .first()
+        )
         if invoice is None:
-            logger.warning("Webhook CamPay sans facture correspondante : %s", reference)
+            logger.warning("Webhook CamPay sans facture en attente correspondante : %s", reference)
             return None
 
         invoice.raw_payload = payload
