@@ -49,7 +49,7 @@ export const LEGAL = {
     /** Adresse du siège social. */
     address: 'Nkolanga, Cameroun',
     /** E-mail de contact (commercial, support, données personnelles). */
-    email: '' as string,
+    email: 'njandjeudavid@gmail.com' as string,
     /** Téléphone / WhatsApp (lib/contact.ts). */
     phone: WHATSAPP_DISPLAY,
     whatsappUrl: `https://wa.me/${WHATSAPP_NUMBER}`,
