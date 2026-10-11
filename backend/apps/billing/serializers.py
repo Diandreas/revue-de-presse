@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.core.uploads import PAYMENT_PROOF_TYPES, VerifiedFileField
+
 from .models import BillingProfile, Invoice, Plan, Subscription
 
 
@@ -7,6 +9,8 @@ def _viewer_is_staff(context):
     request = (context or {}).get("request")
     user = getattr(request, "user", None)
     return bool(user is not None and user.is_authenticated and user.is_staff)
+
+PROOF_MAX_SIZE_BYTES = 10 * 1024 * 1024  # 10 Mo
 
 
 class PlanSerializer(serializers.ModelSerializer):
@@ -113,7 +117,12 @@ class CheckoutBankTransferSerializer(serializers.Serializer):
 
 
 class InvoiceProofUploadSerializer(serializers.Serializer):
-    proof = serializers.FileField()
+    # Type réel vérifié dans les octets et extension imposée (cf. apps.core.uploads).
+    proof = VerifiedFileField(
+        allowed_types=PAYMENT_PROOF_TYPES,
+        max_size=PROOF_MAX_SIZE_BYTES,
+        formats_message="Justificatif accepté : PDF, JPG ou PNG.",
+    )
 
 
 class InvoiceReviewSerializer(serializers.Serializer):

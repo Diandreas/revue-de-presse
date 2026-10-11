@@ -14,6 +14,7 @@ from apps.billing.models import Invoice, Subscription
 from apps.billing.providers import StripeProvider
 from apps.billing.services import SubscriptionService
 from tests.factories import PlanFactory, SubscriptionFactory, UserFactory
+from tests.pdf_fixtures import make_minimal_pdf_bytes
 
 
 @pytest.fixture(autouse=True)
@@ -75,7 +76,7 @@ def test_validated_bank_transfer_applies_the_requested_plan(authenticated_client
     subscription.refresh_from_db()
     assert subscription.plan == starter  # l'essai continue sur sa formule en attendant le virement
 
-    proof = SimpleUploadedFile("recu.pdf", b"%PDF-1.4 justificatif", content_type="application/pdf")
+    proof = SimpleUploadedFile("recu.pdf", make_minimal_pdf_bytes(["Justificatif"]), content_type="application/pdf")
     response = authenticated_client.post(f"/api/billing/invoices/{invoice.id}/proof/", {"proof": proof}, format="multipart")
     assert response.status_code == 200, response.data
 

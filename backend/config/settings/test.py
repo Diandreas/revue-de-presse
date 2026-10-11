@@ -50,3 +50,10 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
 MEDIA_ROOT = BASE_DIR / "test_mediafiles"  # noqa: F405
+
+# Sécurité : jamais de Redis réel (compteurs de limitation vidés avant chaque test, cf.
+# conftest.py), fichiers servis par Django, valeurs indépendantes du .env partagé.
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "presse-tests"}}
+MEDIA_X_ACCEL_REDIRECT = False
+ADMIN_URL = "admin/"
+REST_FRAMEWORK = {**REST_FRAMEWORK, "NUM_PROXIES": None}  # noqa: F405

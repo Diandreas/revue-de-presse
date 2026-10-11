@@ -26,7 +26,7 @@ import { useCreateJob } from '../features/jobs/useJobs'
 import { formatFileSize, plural } from '../lib/format'
 import { canPreviewInBrowser, classifyLocalFile, prepareImageForUpload } from '../lib/imageCompression'
 
-const ACCEPT = 'application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.tif,.tiff,.heic,.heif'
+const ACCEPT = 'application/pdf,image/*,.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif'
 const MAX_FILE_BYTES = 30 * 1024 * 1024
 const MAX_PARALLEL_UPLOADS = 3
 const MAX_DOCUMENTS = 50

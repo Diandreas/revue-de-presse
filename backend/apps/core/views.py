@@ -9,6 +9,8 @@ class HealthCheckView(APIView):
 
     permission_classes = [AllowAny]
     authentication_classes = []
+    # Sonde appelée en boucle par la supervision : jamais limitée (pas de fausse alerte).
+    throttle_classes = []
 
     def get(self, request):
         with connection.cursor() as cursor:

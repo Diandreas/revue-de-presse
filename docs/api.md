@@ -2,6 +2,13 @@
 
 Documentation interactive générée automatiquement (drf-spectacular) une fois le
 backend lancé : `GET /api/docs/` (Swagger UI), schéma brut sur `GET /api/schema/`.
+Hors dev, ces deux pages sont réservées au staff (session de l'admin Django ou jeton
+`is_staff`).
+
+Les champs de fichier (`file`, `pdf_file`, `docx_file`, `proof_file`, `url` de l'export)
+sont des liens signés `/api/media/<échéance>/<signature>/<chemin>` valables 20 à 30 min,
+utilisables sans jeton (balise `<img>`, téléchargement). Les routes sensibles sont
+limitées en débit : au-delà, réponse `429` avec `Retry-After`. Détails : `docs/securite.md`.
 
 Toutes les routes de domaine (hors `/api/auth/*` et `/api/health/`) exigent un JWT
 (`Authorization: Bearer <access>`) et résolvent l'organisation courante via l'en-tête

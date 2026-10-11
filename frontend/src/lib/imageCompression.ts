@@ -52,14 +52,17 @@ export async function prepareImageForUpload(file: File): Promise<File> {
   }
 }
 
-const IMAGE_EXTENSIONS = /\.(jpe?g|png|webp|tiff?|bmp|gif|heic|heif)$/i
+// Mêmes formats que le serveur (backend/apps/core/uploads.py), qui vérifie de toute façon
+// le contenu réel : un SVG, un GIF ou un TIFF est refusé dès la sélection.
+const IMAGE_EXTENSIONS = /\.(jpe?g|png|webp|heic|heif)$/i
+const IMAGE_TYPES = /^image\/(jpeg|png|webp|heic|heif)$/
 const PDF_EXTENSION = /\.pdf$/i
 
 export type LocalFileKind = 'pdf' | 'image' | 'unsupported'
 
 export function classifyLocalFile(file: File): LocalFileKind {
   if (file.type === 'application/pdf' || PDF_EXTENSION.test(file.name)) return 'pdf'
-  if (file.type.startsWith('image/') || IMAGE_EXTENSIONS.test(file.name)) return 'image'
+  if (IMAGE_TYPES.test(file.type) || IMAGE_EXTENSIONS.test(file.name)) return 'image'
   return 'unsupported'
 }
 

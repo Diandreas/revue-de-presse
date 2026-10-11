@@ -11,6 +11,7 @@ psycopg[binary]>=3.2,<3.3
 
 # PDF / images / OCR
 pdfplumber>=0.11,<0.12
+pypdfium2>=4.18,<6  # déjà requis par pdfplumber ; utilisé directement pour vérifier les PDF déposés
 pdf2image>=1.17,<1.18
 pytesseract>=0.3,<0.4
 Pillow>=10.4,<10.5
