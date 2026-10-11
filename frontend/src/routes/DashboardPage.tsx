@@ -3,13 +3,13 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { PressReviewJobListItem } from '../api/types'
 import { useAuth } from '../auth/useAuth'
+import { JobActionsMenu } from '../components/JobActionsMenu'
 import { JobStatusBadge } from '../components/StatusBadge'
 import { UsageBanner } from '../components/UsageCard'
 import {
   AlertCircleIcon,
   ArrowRightIcon,
   CheckCircleIcon,
-  ChevronRightIcon,
   ClockIcon,
   DownloadIcon,
   FileTextIcon,
@@ -45,56 +45,61 @@ function JobRow({ job }: { job: PressReviewJobListItem }) {
   const isReady = job.status === 'REVIEW_READY' || job.status === 'EXPORTED'
 
   return (
-    <Link to={`/jobs/${job.id}`} className="card-interactive group flex items-center gap-4 animate-slide-up">
-      <div
-        className={clsx(
-          'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl',
-          isReady && 'bg-emerald-50 text-emerald-600',
-          isActive && 'bg-brand-50 text-brand-600',
-          isFailed && 'bg-red-50 text-red-600',
-        )}
-      >
-        {isReady && <CheckCircleIcon className="h-6 w-6" />}
-        {isActive && <SparkleIcon className="h-6 w-6 animate-pulse" />}
-        {isFailed && <AlertCircleIcon className="h-6 w-6" />}
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-3">
-          <p className="truncate font-display text-[16px] font-semibold text-slate-900 group-hover:text-brand-700">
-            {job.title || 'Revue sans titre'}
-          </p>
-          <JobStatusBadge status={job.status} className="hidden shrink-0 sm:inline-flex" />
-        </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-          <span className="inline-flex items-center gap-1">
-            <ClockIcon className="h-3.5 w-3.5" />
-            {formatRelative(job.created_at)}
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <LayersIcon className="h-3.5 w-3.5" />
-            {plural(job.documents_count, 'document')}
-          </span>
-          {isReady && (
-            <span className="inline-flex items-center gap-1 font-medium text-slate-600">
-              <HighlighterIcon className="h-3.5 w-3.5 text-amber-500" />
-              {plural(job.highlights_count, 'point clé', 'points clés')}
-            </span>
+    // Menu « ⋯ » hors du lien (pas de bouton dans un <a>), posé sur la carte ; la ligne passe
+    // au-dessus des suivantes quand son menu est ouvert.
+    <div className="relative animate-slide-up has-[[aria-expanded=true]]:z-20">
+      <Link to={`/jobs/${job.id}`} className="card-interactive group flex items-center gap-4 pr-14 sm:pr-16">
+        <div
+          className={clsx(
+            'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl',
+            isReady && 'bg-emerald-50 text-emerald-600',
+            isActive && 'bg-brand-50 text-brand-600',
+            isFailed && 'bg-red-50 text-red-600',
           )}
+        >
+          {isReady && <CheckCircleIcon className="h-6 w-6" />}
+          {isActive && <SparkleIcon className="h-6 w-6 animate-pulse" />}
+          {isFailed && <AlertCircleIcon className="h-6 w-6" />}
         </div>
-        {isActive && (
-          <div className="mt-3 flex items-center gap-3">
-            <ProgressBar percent={job.progress_percent} size="sm" className="max-w-xs" />
-            <span className="text-xs font-medium whitespace-nowrap text-brand-700 tabular-nums">
-              {STEP_HINTS[job.status]} · {job.progress_percent} %
-            </span>
-          </div>
-        )}
-        <JobStatusBadge status={job.status} className="mt-2 sm:hidden" />
-      </div>
 
-      <ChevronRightIcon className="hidden h-5 w-5 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-brand-500 sm:block" />
-    </Link>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <p className="truncate font-display text-[16px] font-semibold text-slate-900 group-hover:text-brand-700">
+              {job.title || 'Revue sans titre'}
+            </p>
+            <JobStatusBadge status={job.status} className="hidden shrink-0 sm:inline-flex" />
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+            <span className="inline-flex items-center gap-1">
+              <ClockIcon className="h-3.5 w-3.5" />
+              {formatRelative(job.created_at)}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <LayersIcon className="h-3.5 w-3.5" />
+              {plural(job.documents_count, 'document')}
+            </span>
+            {isReady && (
+              <span className="inline-flex items-center gap-1 font-medium text-slate-600">
+                <HighlighterIcon className="h-3.5 w-3.5 text-amber-500" />
+                {plural(job.highlights_count, 'point clé', 'points clés')}
+              </span>
+            )}
+          </div>
+          {isActive && (
+            <div className="mt-3 flex items-center gap-3">
+              <ProgressBar percent={job.progress_percent} size="sm" className="max-w-xs" />
+              <span className="text-xs font-medium whitespace-nowrap text-brand-700 tabular-nums">
+                {STEP_HINTS[job.status]} · {job.progress_percent} %
+              </span>
+            </div>
+          )}
+          <JobStatusBadge status={job.status} className="mt-2 sm:hidden" />
+        </div>
+      </Link>
+      <div className="absolute top-1/2 right-2 -translate-y-1/2 sm:right-3">
+        <JobActionsMenu job={job} />
+      </div>
+    </div>
   )
 }
 

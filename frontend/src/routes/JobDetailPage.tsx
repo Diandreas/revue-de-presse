@@ -1,25 +1,43 @@
+import { useQueryClient } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 import clsx from 'clsx'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { extractErrorMessage } from '../api/client'
-import type { CategoryType, Highlight, PressReviewJobDetail, SourceDocument } from '../api/types'
+import type {
+  CategoryType,
+  DetectionCategory,
+  GeneratedReview,
+  Highlight,
+  PressReviewJobDetail,
+  SourceDocument,
+} from '../api/types'
 import { DocumentGrid } from '../components/DocumentGrid'
+import { JobActionsMenu } from '../components/JobActionsMenu'
+import { Modal } from '../components/Modal'
+import { PressReviewEditor } from '../components/PressReviewEditor'
 import { PressReviewSheet, pressReviewToText } from '../components/PressReviewSheet'
 import { PIPELINE_STEPS, ProgressStepper } from '../components/ProgressStepper'
+import { ShareReviewButton } from '../components/ShareReviewButton'
 import { JobStatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/Toast'
 import {
   AlertTriangleIcon,
+  CheckIcon,
   ClockIcon,
   DownloadIcon,
+  EyeIcon,
+  EyeOffIcon,
   FileTextIcon,
   HighlighterIcon,
   ImageIcon,
   LayersIcon,
   NewspaperIcon,
+  PenLineIcon,
   RefreshIcon,
+  RotateCcwIcon,
   ScaleIcon,
   SparkleIcon,
   StarIcon,
@@ -27,6 +45,15 @@ import {
   type IconComponent,
 } from '../components/icons'
 import { Alert, CopyButton, EmptyState, FullPageLoader, PageHeader, ProgressRing, Segmented, Skeleton, Spinner } from '../components/ui'
+import { useCategories } from '../features/categories/useCategories'
+import {
+  countEntries,
+  createDraft,
+  draftChanges,
+  draftProblems,
+  draftToStructured,
+  type ReviewDraft,
+} from '../features/jobs/reviewDraft'
 import {
   ACTIVE_STATUSES,
   READY_STATUSES,
@@ -36,6 +63,7 @@ import {
   useJobReview,
   useRetryJob,
 } from '../features/jobs/useJobs'
+import { useRestoreReview, useUpdateHighlight, useUpdateReview } from '../features/jobs/useReviewEditing'
 import { formatDateTime, formatRelative, hexToRgba, plural } from '../lib/format'
 
 const CATEGORY_ICONS: Record<CategoryType, IconComponent> = {
@@ -122,12 +150,25 @@ function ProcessingPanel({ job }: { job: PressReviewJobDetail }) {
  * Revue prête
  * ------------------------------------------------------------------------- */
 
-function HighlightCard({ highlight, sourceName }: { highlight: Highlight; sourceName?: string }) {
+interface HighlightCardProps {
+  highlight: Highlight
+  sourceName?: string
+  categories: DetectionCategory[]
+  onToggleHidden: (highlight: Highlight) => void
+  onChangeCategory: (highlight: Highlight, category: DetectionCategory) => void
+}
+
+function HighlightCard({ highlight, sourceName, categories, onToggleHidden, onChangeCategory }: HighlightCardProps) {
   const color = highlight.category.color || '#64748b'
   const Icon = CATEGORY_ICONS[highlight.category.type] ?? TagIcon
+  // Catégories proposées : les actives, plus l'actuelle même si elle a été désactivée depuis.
+  const choices = categories.some((c) => c.id === highlight.category.id) ? categories : [highlight.category, ...categories]
   return (
     <article
-      className="rounded-2xl border bg-white p-4 shadow-[var(--shadow-soft)] animate-slide-up"
+      className={clsx(
+        'rounded-2xl border bg-white p-4 shadow-[var(--shadow-soft)] animate-slide-up',
+        highlight.hidden && 'border-dashed !bg-slate-50 opacity-75',
+      )}
       style={{ borderColor: hexToRgba(color, 0.28) }}
     >
       <div className="flex items-center justify-between gap-2">
@@ -135,12 +176,27 @@ function HighlightCard({ highlight, sourceName }: { highlight: Highlight; source
           <Icon className="h-3.5 w-3.5" />
           {highlight.category.name}
         </span>
-        {highlight.confidence != null && (
-          <span className="text-[11px] text-slate-400 tabular-nums" title="Niveau de confiance de l’IA">
-            Confiance {Math.round(highlight.confidence * 100)} %
-          </span>
-        )}
+        <div className="flex items-center gap-1">
+          {highlight.confidence != null && (
+            <span className="text-[11px] text-slate-400 tabular-nums" title="Niveau de confiance de l’IA">
+              Confiance {Math.round(highlight.confidence * 100)} %
+            </span>
+          )}
+          <button
+            type="button"
+            className="btn-icon !h-8 !w-8"
+            aria-pressed={highlight.hidden}
+            aria-label={highlight.hidden ? 'Réafficher ce point clé' : 'Masquer ce point clé (faux positif)'}
+            title={highlight.hidden ? 'Réafficher dans la revue et les exports' : 'Masquer : absent des exports PDF et Word'}
+            onClick={() => onToggleHidden(highlight)}
+          >
+            {highlight.hidden ? <EyeIcon className="h-4 w-4" /> : <EyeOffIcon className="h-4 w-4" />}
+          </button>
+        </div>
       </div>
+      {highlight.hidden && (
+        <p className="mt-2 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">Masqué · absent des exports</p>
+      )}
       <blockquote
         className="mt-3 rounded-r-lg py-1.5 pr-2 pl-3 font-display text-[15px] leading-relaxed text-slate-900 italic"
         style={{ borderLeft: `3px solid ${color}`, backgroundColor: hexToRgba(color, 0.05) }}
@@ -149,26 +205,64 @@ function HighlightCard({ highlight, sourceName }: { highlight: Highlight; source
         {`« ${highlight.excerpt.trim()} »`}
       </blockquote>
       {highlight.explanation && <p className="mt-2.5 text-[13px] leading-relaxed text-slate-600">{highlight.explanation}</p>}
-      {sourceName && (
-        <p className="mt-3 flex items-center gap-1.5 text-[11px] text-slate-400">
-          <FileTextIcon className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">
-            {sourceName}
-            {highlight.page_number ? ` · page ${highlight.page_number}` : ''}
-          </span>
-        </p>
-      )}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 text-[11px] text-slate-400">
+        {sourceName ? (
+          <p className="flex min-w-0 items-center gap-1.5">
+            <FileTextIcon className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">
+              {sourceName}
+              {highlight.page_number ? ` · page ${highlight.page_number}` : ''}
+            </span>
+          </p>
+        ) : (
+          <span />
+        )}
+        {choices.length > 1 && (
+          <select
+            className="max-w-[11rem] rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-slate-600"
+            aria-label="Changer la catégorie de ce point clé"
+            value={highlight.category.id}
+            onChange={(event) => {
+              const category = choices.find((c) => c.id === event.target.value)
+              if (category) onChangeCategory(highlight, category)
+            }}
+          >
+            {choices.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
     </article>
   )
 }
 
-function HighlightsPanel({ highlights, documents }: { highlights: Highlight[] | undefined; documents: SourceDocument[] }) {
-  const [filter, setFilter] = useState<string>('all')
+type HighlightFilter = 'all' | 'hidden' | string
+
+function HighlightsPanel({
+  highlights,
+  documents,
+  jobId,
+}: {
+  highlights: Highlight[] | undefined
+  documents: SourceDocument[]
+  jobId: string
+}) {
+  const toast = useToast()
+  const [filter, setFilter] = useState<HighlightFilter>('all')
   const documentNames = useMemo(() => new Map(documents.map((d) => [d.id, d.original_filename])), [documents])
+  const { data: allCategories } = useCategories()
+  const activeCategories = useMemo(() => (allCategories ?? []).filter((c) => c.is_active), [allCategories])
+  const updateHighlight = useUpdateHighlight(jobId)
+
+  const shown = useMemo(() => highlights?.filter((h) => !h.hidden), [highlights])
+  const hiddenCount = (highlights?.length ?? 0) - (shown?.length ?? 0)
 
   const categories = useMemo(() => {
     const byId = new Map<string, { id: string; name: string; color: string; count: number }>()
-    for (const highlight of highlights ?? []) {
+    for (const highlight of shown ?? []) {
       const entry = byId.get(highlight.category.id)
       if (entry) entry.count += 1
       else
@@ -180,9 +274,44 @@ function HighlightsPanel({ highlights, documents }: { highlights: Highlight[] | 
         })
     }
     return [...byId.values()]
-  }, [highlights])
+  }, [shown])
 
-  const visible = highlights?.filter((h) => filter === 'all' || h.category.id === filter)
+  // Filtre devenu vide (dernier point d'une catégorie masqué, dernier masqué réaffiché) :
+  // retour à la liste complète.
+  const activeFilter: HighlightFilter =
+    filter === 'hidden'
+      ? hiddenCount > 0
+        ? 'hidden'
+        : 'all'
+      : filter === 'all' || categories.some((c) => c.id === filter)
+        ? filter
+        : 'all'
+  const visible =
+    activeFilter === 'hidden'
+      ? highlights?.filter((h) => h.hidden)
+      : shown?.filter((h) => activeFilter === 'all' || h.category.id === activeFilter)
+
+  const toggleHidden = (highlight: Highlight) => {
+    const hidden = !highlight.hidden
+    updateHighlight.mutate(
+      { highlightId: highlight.id, hidden },
+      {
+        onSuccess: () =>
+          toast.success(hidden ? 'Point clé masqué : il n’apparaîtra plus dans les exports.' : 'Point clé réaffiché.'),
+        onError: (error) => toast.error(extractErrorMessage(error, 'Impossible de modifier ce point clé.')),
+      },
+    )
+  }
+
+  const changeCategory = (highlight: Highlight, category: DetectionCategory) => {
+    updateHighlight.mutate(
+      { highlightId: highlight.id, category },
+      {
+        onSuccess: () => toast.success(`Point clé classé dans « ${category.name} ».`),
+        onError: (error) => toast.error(extractErrorMessage(error, 'Impossible de changer la catégorie.')),
+      },
+    )
+  }
 
   return (
     <section className="card !p-0">
@@ -192,19 +321,19 @@ function HighlightsPanel({ highlights, documents }: { highlights: Highlight[] | 
             <HighlighterIcon className="h-5 w-5 text-amber-500" />
             Points clés
           </h2>
-          {highlights && <span className="text-xs font-medium text-slate-400">{highlights.length}</span>}
+          {shown && <span className="text-xs font-medium text-slate-400">{shown.length}</span>}
         </div>
-        {categories.length > 0 && (
+        {(categories.length > 0 || hiddenCount > 0) && (
           <div className="mt-3 flex flex-wrap gap-1.5">
             <button
               type="button"
               onClick={() => setFilter('all')}
               className={clsx(
                 'chip ring-1 transition',
-                filter === 'all' ? 'bg-ink-900 text-white ring-ink-900' : 'bg-white text-slate-600 ring-slate-200 hover:ring-slate-300',
+                activeFilter === 'all' ? 'bg-ink-900 text-white ring-ink-900' : 'bg-white text-slate-600 ring-slate-200 hover:ring-slate-300',
               )}
             >
-              Tous · {highlights?.length ?? 0}
+              Tous · {shown?.length ?? 0}
             </button>
             {categories.map((category) => (
               <button
@@ -213,7 +342,7 @@ function HighlightsPanel({ highlights, documents }: { highlights: Highlight[] | 
                 onClick={() => setFilter(category.id)}
                 className="chip ring-1 transition"
                 style={
-                  filter === category.id
+                  activeFilter === category.id
                     ? { backgroundColor: category.color, color: '#fff', boxShadow: `0 0 0 1px ${category.color}` }
                     : { backgroundColor: hexToRgba(category.color, 0.08), color: category.color, boxShadow: `0 0 0 1px ${hexToRgba(category.color, 0.25)}` }
                 }
@@ -221,6 +350,21 @@ function HighlightsPanel({ highlights, documents }: { highlights: Highlight[] | 
                 {category.name} · {category.count}
               </button>
             ))}
+            {hiddenCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setFilter('hidden')}
+                className={clsx(
+                  'chip ring-1 transition',
+                  activeFilter === 'hidden'
+                    ? 'bg-slate-600 text-white ring-slate-600'
+                    : 'bg-slate-50 text-slate-500 ring-slate-200 hover:ring-slate-300',
+                )}
+              >
+                <EyeOffIcon className="h-3.5 w-3.5" />
+                Masqués · {hiddenCount}
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -241,15 +385,269 @@ function HighlightsPanel({ highlights, documents }: { highlights: Highlight[] | 
             className="!py-8"
           />
         )}
+        {highlights && highlights.length > 0 && visible?.length === 0 && (
+          <p className="px-2 py-6 text-center text-sm text-slate-500">
+            Tous les points clés sont masqués. Ouvrez « Masqués » pour en réafficher.
+          </p>
+        )}
         {visible?.map((highlight) => (
           <HighlightCard
             key={highlight.id}
             highlight={highlight}
             sourceName={highlight.source_document ? documentNames.get(highlight.source_document) : undefined}
+            categories={activeCategories}
+            onToggleHidden={toggleHidden}
+            onChangeCategory={changeCategory}
           />
         ))}
       </div>
     </section>
+  )
+}
+
+/* ---------------------------------------------------------------------------
+ * Relecture : mode « Modifier » de la revue
+ * ------------------------------------------------------------------------- */
+
+const NO_PROBLEMS = new Map<string, string>()
+
+/** État du mode « Modifier » : brouillon local, enregistrement optimiste (la revue corrigée
+ * s'affiche aussitôt ; en cas d'échec, l'éditeur se rouvre avec le brouillon intact). */
+function useReviewEditor(job: PressReviewJobDetail, review: GeneratedReview | undefined) {
+  const toast = useToast()
+  const queryClient = useQueryClient()
+  const updateReview = useUpdateReview(job.id)
+  const restoreReview = useRestoreReview(job.id)
+  const [editor, setEditor] = useState<{ draft: ReviewDraft; initial: ReviewDraft } | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [showProblems, setShowProblems] = useState(false)
+
+  const dirty = Boolean(editing && editor && Object.keys(draftChanges(editor.draft, editor.initial)).length > 0)
+
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
+  const start = () => {
+    if (!review?.structured) return
+    const initial = createDraft(review.structured, review.rubriques, job.title)
+    setEditor({ draft: initial, initial })
+    setShowProblems(false)
+    setEditing(true)
+  }
+
+  const cancel = () => {
+    setEditing(false)
+    setEditor(null)
+  }
+
+  const change = (update: (draft: ReviewDraft) => ReviewDraft) =>
+    setEditor((current) => (current ? { ...current, draft: update(current.draft) } : current))
+
+  const save = () => {
+    if (!editor || !review) return
+    const { first } = draftProblems(editor.draft)
+    if (first) {
+      setShowProblems(true)
+      toast.error(first)
+      return
+    }
+    const changes = draftChanges(editor.draft, editor.initial)
+    if (Object.keys(changes).length === 0) {
+      cancel()
+      toast.info('Aucune modification à enregistrer.')
+      return
+    }
+    setEditing(false)
+    updateReview.mutate(
+      {
+        changes: { ...changes, expected_edited_at: review.edited_at },
+        optimistic: draftToStructured(editor.draft, review.rubriques, review.structured?.country ?? ''),
+      },
+      {
+        onSuccess: () => {
+          setEditor(null)
+          toast.success('Revue enregistrée. Les exports PDF et Word reprennent vos corrections.')
+        },
+        onError: (error) => {
+          setEditing(true)
+          if (isAxiosError(error) && error.response?.status === 409) {
+            // Version à jour rechargée : un nouvel « Enregistrer » remplacera la correction du collègue.
+            void queryClient.invalidateQueries({ queryKey: ['jobs', job.id, 'review'] })
+          }
+          toast.error(extractErrorMessage(error, 'L’enregistrement a échoué. Vos modifications sont conservées : réessayez.'))
+        },
+      },
+    )
+  }
+
+  const restore = async () => {
+    try {
+      await restoreReview.mutateAsync()
+      cancel()
+      toast.success('Version rédigée par l’IA restaurée.')
+      return true
+    } catch (error) {
+      toast.error(extractErrorMessage(error, 'Impossible de restaurer la version de l’IA.'))
+      return false
+    }
+  }
+
+  return {
+    editing: editing && editor !== null,
+    draft: editor?.draft ?? null,
+    dirty,
+    problems: showProblems && editor ? draftProblems(editor.draft).byEntry : NO_PROBLEMS,
+    saving: updateReview.isPending,
+    restoring: restoreReview.isPending,
+    start,
+    cancel,
+    change,
+    save,
+    restore,
+  }
+}
+
+type ReviewEditorState = ReturnType<typeof useReviewEditor>
+
+function ReviewArticle({
+  job,
+  review,
+  reviewLoading,
+  editor,
+  className,
+}: {
+  job: PressReviewJobDetail
+  review: GeneratedReview | undefined
+  reviewLoading: boolean
+  editor: ReviewEditorState
+  className?: string
+}) {
+  const [restoreOpen, setRestoreOpen] = useState(false)
+  const canEdit = Boolean(review?.structured)
+
+  return (
+    <article
+      className={clsx(
+        // overflow-clip (et non hidden) : la barre « Enregistrer » reste collée en bas de l'écran.
+        'min-w-0 overflow-clip rounded-3xl border bg-paper shadow-[var(--shadow-card)]',
+        editor.editing ? 'border-brand-300 ring-2 ring-brand-100' : 'border-slate-200/80',
+        className,
+      )}
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/70 px-6 py-4 sm:px-10">
+        <p className="eyebrow !text-slate-500">
+          {editor.editing ? 'Modification de la revue' : `Revue de presse · ${formatDateTime(review?.generated_at ?? job.completed_at)}`}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          {review?.is_edited ? (
+            <span className="chip bg-amber-50 text-amber-800 ring-1 ring-amber-200/70" title="Corrigée à la main après la rédaction par l’IA">
+              <PenLineIcon className="h-3.5 w-3.5" />
+              Corrigée{review.edited_by_name ? ` par ${review.edited_by_name}` : ''}
+              {review.edited_at ? ` · ${formatRelative(review.edited_at)}` : ''}
+            </span>
+          ) : (
+            <span className="chip bg-brand-50 text-brand-700 ring-1 ring-brand-200/70">
+              <SparkleIcon className="h-3.5 w-3.5" />
+              Rédigée par l’IA
+            </span>
+          )}
+          {canEdit && !editor.editing && (
+            <>
+              {review?.is_edited && (
+                <button type="button" className="btn-ghost btn-sm" disabled={editor.saving} onClick={() => setRestoreOpen(true)}>
+                  <RotateCcwIcon className="h-4 w-4" />
+                  Version de l’IA
+                </button>
+              )}
+              <button type="button" className="btn-secondary btn-sm" disabled={editor.saving} onClick={editor.start}>
+                {editor.saving ? <Spinner /> : <PenLineIcon className="h-4 w-4" />}
+                {editor.saving ? 'Enregistrement…' : 'Modifier'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="px-6 py-8 sm:px-10 sm:py-10">
+        {reviewLoading && (
+          <div className="space-y-3">
+            <Skeleton className="h-8 w-2/3" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-4/5" />
+          </div>
+        )}
+        {editor.editing && editor.draft && review ? (
+          <PressReviewEditor
+            draft={editor.draft}
+            onChange={editor.change}
+            rubriques={review.rubriques}
+            country={review.structured?.country ?? ''}
+            problems={editor.problems}
+          />
+        ) : (
+          <>
+            {review?.structured && <PressReviewSheet review={review.structured} />}
+            {review && !review.structured && (
+              <div className="prose-review">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{review.summary_markdown}</ReactMarkdown>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {editor.editing && editor.draft ? (
+        <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur sm:px-10">
+          <p className="text-xs text-slate-500">
+            {plural(countEntries(editor.draft), 'notice')} · {editor.dirty ? 'modifications non enregistrées' : 'aucune modification'}
+          </p>
+          <div className="flex gap-2">
+            <button type="button" className="btn-secondary" onClick={editor.cancel}>
+              Annuler
+            </button>
+            <button type="button" className="btn-primary" onClick={editor.save}>
+              <CheckIcon className="h-4 w-4" />
+              Enregistrer
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="border-t border-slate-200/70 px-6 py-4 text-xs leading-relaxed text-slate-400 sm:px-10">
+          Synthèse générée automatiquement à partir des documents fournis. Elle ne constitue pas un avis juridique :
+          vérifiez les passages sensibles avant diffusion.
+        </p>
+      )}
+
+      <Modal
+        open={restoreOpen}
+        onClose={() => setRestoreOpen(false)}
+        title="Restaurer la version de l’IA ?"
+        description="La revue redevient celle rédigée par l’IA : toutes les corrections manuelles (notices, ordre, date) sont perdues."
+        footer={
+          <>
+            <button type="button" className="btn-secondary" onClick={() => setRestoreOpen(false)}>
+              Annuler
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={editor.restoring}
+              onClick={() => void editor.restore().then((ok) => ok && setRestoreOpen(false))}
+            >
+              {editor.restoring ? <Spinner /> : <RotateCcwIcon className="h-4 w-4" />}
+              Restaurer
+            </button>
+          </>
+        }
+      >
+        <p className="text-sm text-slate-600">Le titre de la revue et les points clés masqués ne changent pas.</p>
+      </Modal>
+    </article>
   )
 }
 
@@ -261,15 +659,7 @@ type ReadyTab = 'review' | 'highlights' | 'documents'
 
 export default function JobDetailPage() {
   const { jobId } = useParams<{ jobId: string }>()
-  const toast = useToast()
   const { data: job, isLoading, isError } = useJob(jobId)
-  const isReady = Boolean(job && READY_STATUSES.has(job.status))
-  const isActive = Boolean(job && ACTIVE_STATUSES.has(job.status))
-  const { data: highlights } = useJobHighlights(jobId, isReady)
-  const { data: review, isLoading: reviewLoading } = useJobReview(jobId, isReady)
-  const retryMutation = useRetryJob(jobId ?? '')
-  const exportMutation = useExportReview(jobId ?? '')
-  const [tab, setTab] = useState<ReadyTab>('review')
 
   if (isLoading) return <FullPageLoader label="Chargement de la revue…" />
   if (isError || !job) {
@@ -281,9 +671,32 @@ export default function JobDetailPage() {
       />
     )
   }
+  return <JobDetail key={job.id} job={job} />
+}
+
+function JobDetail({ job }: { job: PressReviewJobDetail }) {
+  const toast = useToast()
+  const navigate = useNavigate()
+  const isReady = READY_STATUSES.has(job.status)
+  const isActive = ACTIVE_STATUSES.has(job.status)
+  const { data: highlights } = useJobHighlights(job.id, isReady)
+  const { data: review, isLoading: reviewLoading } = useJobReview(job.id, isReady)
+  const retryMutation = useRetryJob(job.id)
+  const exportMutation = useExportReview(job.id)
+  const [tab, setTab] = useState<ReadyTab>('review')
+  const editor = useReviewEditor(job, review)
 
   const skipped = job.documents.filter((d) => d.extraction_status === 'failed')
   const exportingFormat = exportMutation.isPending ? exportMutation.variables : null
+  const shownHighlights = highlights?.filter((h) => !h.hidden)
+  const fileBase = slugify(job.title || 'revue-de-presse') || 'revue-de-presse'
+  const reviewText = review ? (review.structured ? pressReviewToText(review.structured) : review.summary_markdown) : ''
+  // Tout ce qui change le PDF : titre, corrections, points clés masqués ou reclassés.
+  const exportVersion = [
+    job.title,
+    review?.edited_at ?? review?.generated_at ?? '',
+    (highlights ?? []).map((h) => `${h.id}:${h.hidden ? 1 : 0}:${h.category.id}`).join(','),
+  ].join('|')
 
   const handleExport = async (format: 'pdf' | 'docx') => {
     try {
@@ -291,7 +704,7 @@ export default function JobDetailPage() {
       // Lien de téléchargement direct (même origine) : pas bloqué comme une pop-up sur mobile.
       const link = document.createElement('a')
       link.href = url
-      link.download = `${slugify(job.title || 'revue-de-presse') || 'revue-de-presse'}.${format}`
+      link.download = `${fileBase}.${format}`
       link.rel = 'noopener'
       document.body.appendChild(link)
       link.click()
@@ -310,6 +723,11 @@ export default function JobDetailPage() {
     }
   }
 
+  const startEditing = () => {
+    editor.start()
+    setTab('review')
+  }
+
   const meta = (
     <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
       <span className="inline-flex items-center gap-1.5">
@@ -320,32 +738,41 @@ export default function JobDetailPage() {
         <LayersIcon className="h-4 w-4" />
         {documentSummary(job.documents) || plural(job.documents.length, 'document')}
       </span>
-      {isReady && highlights && (
+      {isReady && shownHighlights && (
         <span className="inline-flex items-center gap-1.5">
           <HighlighterIcon className="h-4 w-4 text-amber-500" />
-          {plural(highlights.length, 'point clé', 'points clés')}
+          {plural(shownHighlights.length, 'point clé', 'points clés')}
         </span>
       )}
     </span>
   )
 
-  const exportActions = isReady && (
+  const actions = (
     <>
-      {review?.summary_markdown && (
-        <CopyButton
-          text={review.structured ? pressReviewToText(review.structured) : review.summary_markdown}
-          label="Copier le texte"
-          className="!h-10 !px-4"
-        />
+      {isReady && !editor.editing && (
+        <>
+          {reviewText && <CopyButton text={reviewText} label="Copier le texte" className="!h-10 !px-4" />}
+          {reviewText && (
+            <ShareReviewButton
+              title={job.title || 'Revue de presse'}
+              text={reviewText}
+              fileName={`${fileBase}.pdf`}
+              getPdfUrl={() => exportMutation.mutateAsync('pdf')}
+              version={exportVersion}
+              onDownloadPdf={() => void handleExport('pdf')}
+            />
+          )}
+          <button type="button" className="btn-secondary" disabled={exportMutation.isPending} onClick={() => void handleExport('docx')}>
+            {exportingFormat === 'docx' ? <Spinner /> : <DownloadIcon className="h-4 w-4" />}
+            Word
+          </button>
+          <button type="button" className="btn-primary" disabled={exportMutation.isPending} onClick={() => void handleExport('pdf')}>
+            {exportingFormat === 'pdf' ? <Spinner /> : <DownloadIcon className="h-4 w-4" />}
+            Exporter en PDF
+          </button>
+        </>
       )}
-      <button type="button" className="btn-secondary" disabled={exportMutation.isPending} onClick={() => void handleExport('docx')}>
-        {exportingFormat === 'docx' ? <Spinner /> : <DownloadIcon className="h-4 w-4" />}
-        Word
-      </button>
-      <button type="button" className="btn-primary" disabled={exportMutation.isPending} onClick={() => void handleExport('pdf')}>
-        {exportingFormat === 'pdf' ? <Spinner /> : <DownloadIcon className="h-4 w-4" />}
-        Exporter en PDF
-      </button>
+      <JobActionsMenu job={job} onDeleted={() => navigate('/dashboard')} />
     </>
   )
 
@@ -356,7 +783,7 @@ export default function JobDetailPage() {
         eyebrow={<JobStatusBadge status={job.status} className="normal-case tracking-normal" />}
         title={job.title || 'Revue sans titre'}
         subtitle={meta}
-        actions={exportActions || undefined}
+        actions={actions}
       />
 
       {isActive && (
@@ -412,44 +839,22 @@ export default function JobDetailPage() {
             onChange={setTab}
             options={[
               { value: 'review', label: 'Revue' },
-              { value: 'highlights', label: `Points clés${highlights ? ` · ${highlights.length}` : ''}` },
+              { value: 'highlights', label: `Points clés${shownHighlights ? ` · ${shownHighlights.length}` : ''}` },
               { value: 'documents', label: `Documents · ${job.documents.length}` },
             ]}
           />
 
           <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-            <article className={clsx('min-w-0 overflow-hidden rounded-3xl border border-slate-200/80 bg-paper shadow-[var(--shadow-card)]', tab !== 'review' && 'hidden lg:block')}>
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/70 px-6 py-4 sm:px-10">
-                <p className="eyebrow !text-slate-500">Revue de presse · {formatDateTime(review?.generated_at ?? job.completed_at)}</p>
-                <span className="chip bg-brand-50 text-brand-700 ring-1 ring-brand-200/70">
-                  <SparkleIcon className="h-3.5 w-3.5" />
-                  Rédigée par l’IA
-                </span>
-              </div>
-              <div className="px-6 py-8 sm:px-10 sm:py-10">
-                {reviewLoading && (
-                  <div className="space-y-3">
-                    <Skeleton className="h-8 w-2/3" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-4 w-4/5" />
-                  </div>
-                )}
-                {review?.structured && <PressReviewSheet review={review.structured} />}
-                {review && !review.structured && (
-                  <div className="prose-review">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{review.summary_markdown}</ReactMarkdown>
-                  </div>
-                )}
-              </div>
-              <p className="border-t border-slate-200/70 px-6 py-4 text-xs leading-relaxed text-slate-400 sm:px-10">
-                Synthèse générée automatiquement à partir des documents fournis. Elle ne constitue pas un avis juridique :
-                vérifiez les passages sensibles avant diffusion.
-              </p>
-            </article>
+            <ReviewArticle
+              job={job}
+              review={review}
+              reviewLoading={reviewLoading}
+              editor={{ ...editor, start: startEditing }}
+              className={clsx(tab !== 'review' && 'hidden lg:block')}
+            />
 
             <div className={clsx('lg:sticky lg:top-8', tab !== 'highlights' && 'hidden lg:block')}>
-              <HighlightsPanel highlights={highlights} documents={job.documents} />
+              <HighlightsPanel highlights={highlights} documents={job.documents} jobId={job.id} />
             </div>
           </div>
 
