@@ -39,11 +39,6 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 MEDIA_X_ACCEL_REDIRECT = env.bool("MEDIA_X_ACCEL_REDIRECT", default=True)  # noqa: F405
 REST_FRAMEWORK = {**REST_FRAMEWORK, "NUM_PROXIES": env.int("DJANGO_NUM_PROXIES", default=1)}  # noqa: F405
 
-# La valeur de repli de base.py est publique (dépôt) : en production elle permettrait de
-# forger des sessions et des jetons. On refuse de démarrer sans vraie clé.
-if not env("DJANGO_SECRET_KEY", default="") or SECRET_KEY == "dev-insecure-key-change-me":  # noqa: F405
-    raise ImproperlyConfigured("DJANGO_SECRET_KEY doit être défini (valeur longue et aléatoire) en production.")
-
 # --- Supervision : Sentry (facultatif, actif seulement si SENTRY_DSN est défini) ---
 # Initialisé ici (et non dans base.py) : jamais d'envoi depuis les tests ni le poste de dev.
 SENTRY_DSN = env("SENTRY_DSN", default="")  # noqa: F405
