@@ -59,6 +59,8 @@ def test_registration_starts_a_free_trial_so_a_new_company_can_create_a_review(a
             "password": "un-mot-de-passe-solide",
             "full_name": "Awa Nkoulou",
             "organization_name": "Presse Plus SARL",
+            "phone_number": "+237 6 77 00 00 02",
+            "accept_terms": True,
         },
     )
     assert response.status_code == 201, response.data
