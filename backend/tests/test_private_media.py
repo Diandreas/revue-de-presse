@@ -231,7 +231,6 @@ def test_invoice_proof_url_is_signed(authenticated_client, organization):
     )
     invoice.proof_file.save("recu.pdf", ContentFile(make_minimal_pdf_bytes(["Reçu"])), save=True)
 
-    data = authenticated_client.get("/api/billing/invoices/").data
-    invoices = data["results"] if isinstance(data, dict) else data
-
-    assert SIGNED_PATH.match(_path_of(invoices[0]["proof_file"]))
+    # Le justificatif n'est plus exposé dans la liste des factures (mode manuel) : seul le
+    # staff le consulte, et son URL reste signée comme tout fichier client.
+    assert SIGNED_PATH.match(_path_of(invoice.proof_file.url))

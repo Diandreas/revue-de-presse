@@ -182,7 +182,9 @@ def test_avif_is_not_mistaken_for_heif():
 
 
 @pytest.fixture
-def pending_bank_invoice(organization):
+def pending_bank_invoice(organization, settings):
+    # Dépôt de justificatif en libre-service : seulement hors mode manuel.
+    settings.BILLING_MODE = "online"
     from django.utils import timezone
 
     subscription = SubscriptionFactory(
