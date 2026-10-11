@@ -248,7 +248,7 @@ BILLING_CONTACT_WHATSAPP = env("BILLING_CONTACT_WHATSAPP", default="+237 693 42 
 # légale du vendeur (à faire valider par un comptable avant la première facture).
 BILLING_INVOICE_PREFIX = env("BILLING_INVOICE_PREFIX", default="RDP")
 BILLING_VAT_RATE = env("BILLING_VAT_RATE", default="19.25")
-BILLING_SELLER_NAME = env("BILLING_SELLER_NAME", default="Revue de Presse")
+BILLING_SELLER_NAME = env("BILLING_SELLER_NAME", default="Excelcis Group")
 BILLING_SELLER_ADDRESS = env("BILLING_SELLER_ADDRESS", default="")
 BILLING_SELLER_RCCM = env("BILLING_SELLER_RCCM", default="")
 BILLING_SELLER_NIU = env("BILLING_SELLER_NIU", default="")

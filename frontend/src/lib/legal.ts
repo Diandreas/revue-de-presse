@@ -37,7 +37,9 @@ export const LEGAL = {
   brand: 'Revue de Presse',
   publisher: {
     /** Raison sociale de l'éditeur. */
-    name: 'Mirlab',
+    name: 'Excelcis Group',
+    /** Site de l'éditeur. */
+    website: 'https://excelcisgroup.com',
     /** Forme juridique (SARL, SAS, établissement…). */
     legalForm: TO_COMPLETE,
     /** Capital social, si société. */

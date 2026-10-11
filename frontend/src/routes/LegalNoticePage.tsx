@@ -24,6 +24,12 @@ const SECTIONS: LegalSection[] = [
         <LegalFacts
           items={[
             ['Raison sociale', publisher.name],
+            [
+              'Site',
+              <ExternalLink key="website" href={publisher.website}>
+                excelcisgroup.com
+              </ExternalLink>,
+            ],
             ['Forme juridique', <LegalValue key="form" value={publisher.legalForm} />],
             ['Capital social', <LegalValue key="capital" value={publisher.capital} />],
             ['Siège social', <LegalValue key="address" value={publisher.address} />],
