@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { extractErrorMessage } from '../api/client'
 import { isAdminRole, useAuth } from '../auth/useAuth'
+import { AccountSettings } from '../components/AccountSettings'
+import { OrganizationLifecycle } from '../components/OrganizationLifecycle'
 import { useToast } from '../components/Toast'
 import {
   BuildingIcon,
@@ -143,6 +145,8 @@ export default function SettingsPage() {
             </dl>
           </section>
 
+          <AccountSettings />
+
           <section className="card">
             <div className="flex items-center gap-3">
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
@@ -180,6 +184,8 @@ export default function SettingsPage() {
               .
             </p>
           </section>
+
+          <OrganizationLifecycle />
         </div>
 
         <aside className="space-y-6">

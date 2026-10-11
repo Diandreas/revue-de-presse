@@ -20,6 +20,9 @@ FRONTEND_BASE_URL = env("FRONTEND_BASE_URL", default="http://localhost:5173")
 # Chemin de l'administration Django. En production, préférez un chemin difficile à
 # deviner (ex. "gestion-7f3k9q/") : `check --deploy` le signale sinon (core.W001).
 ADMIN_URL = (env("DJANGO_ADMIN_URL", default="admin/").strip("/") or "admin") + "/"
+# Version des CGU/CGV et de la politique de confidentialité acceptées à l'inscription
+# (enregistrée sur l'utilisateur, cf. accounts) : à changer à chaque nouvelle version publiée.
+TERMS_VERSION = env("TERMS_VERSION", default="2026-10-11")
 
 DJANGO_APPS = [
     "django.contrib.admin",
@@ -195,6 +198,10 @@ REFRESH_TOKEN_COOKIE_SAMESITE = "Lax"
 # --- CORS (SPA React servie sur un port différent en dev) ---
 CORS_ALLOWED_ORIGINS = env.list("DJANGO_CORS_ALLOWED_ORIGINS", default=[FRONTEND_BASE_URL])
 CORS_ALLOW_CREDENTIALS = True
+# Choix de l'organisation courante (utilisateur membre de plusieurs organisations).
+from corsheaders.defaults import default_headers  # noqa: E402
+
+CORS_ALLOW_HEADERS = (*default_headers, "x-organization-id")
 
 # --- Cache (compteurs de la limitation de débit) ---
 # Redis en production, partagé par tous les workers ; base dédiée conseillée

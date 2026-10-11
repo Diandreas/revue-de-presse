@@ -12,7 +12,8 @@ import { PasswordInput } from '../components/PasswordInput'
 import { Alert, Spinner } from '../components/ui'
 
 const schema = z.object({
-  email: z.string().trim().email('Adresse email invalide.'),
+  // Les comptes sont enregistrés en minuscules : « Jean.Ndjock@… » doit aussi fonctionner.
+  email: z.string().trim().toLowerCase().email('Adresse email invalide.'),
   password: z.string().min(1, 'Mot de passe requis.'),
 })
 
@@ -23,6 +24,8 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [serverError, setServerError] = useState<string | null>(null)
+  // Message transmis par une autre page (ex : « mot de passe modifié »).
+  const notice = (location.state as { notice?: string } | null)?.notice
 
   const {
     register,
@@ -56,6 +59,7 @@ export default function LoginPage() {
       }
     >
       <form className="space-y-5" noValidate onSubmit={(e) => void handleSubmit(onSubmit)(e)}>
+        {notice && <Alert tone="success">{notice}</Alert>}
         <div>
           <label className="label" htmlFor="login-email">
             Email professionnel
@@ -72,9 +76,14 @@ export default function LoginPage() {
           {errors.email && <p className="field-error">{errors.email.message}</p>}
         </div>
         <div>
-          <label className="label" htmlFor="login-password">
-            Mot de passe
-          </label>
+          <div className="flex items-baseline justify-between gap-3">
+            <label className="label" htmlFor="login-password">
+              Mot de passe
+            </label>
+            <Link to="/mot-de-passe-oublie" className="mb-1.5 text-[13px] font-medium text-brand-600 hover:text-brand-700">
+              Mot de passe oublié ?
+            </Link>
+          </div>
           <PasswordInput
             id="login-password"
             autoComplete="current-password"

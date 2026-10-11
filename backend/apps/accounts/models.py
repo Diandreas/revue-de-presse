@@ -18,7 +18,9 @@ class UserManager(BaseUserManager):
     def _create_user(self, email, password, **extra_fields):
         if not email:
             raise ValueError("L'email est obligatoire.")
-        email = self.normalize_email(email)
+        # Toujours en minuscules (inscription, invitation, admin, createsuperuser) : la
+        # connexion compare sans tenir compte de la casse (cf. get_by_natural_key).
+        email = self.normalize_email(email).strip().lower()
         user = self.model(email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
@@ -38,6 +40,21 @@ class UserManager(BaseUserManager):
             raise ValueError("Un superuser doit avoir is_superuser=True.")
         return self._create_user(email, password, **extra_fields)
 
+    def get_by_natural_key(self, username):
+        """Connexion insensible à la casse de l'e-mail : « Jean.Ndjock@… » retrouve le compte
+        enregistré en minuscules. Correspondance exacte d'abord (comptes historiques créés
+        avec des majuscules), puis sans casse ; deux comptes ne différant que par la casse
+        restent ambigus et sont refusés plutôt que de connecter le mauvais."""
+        field = self.model.USERNAME_FIELD
+        try:
+            return self.get(**{field: username})
+        except self.model.DoesNotExist:
+            pass
+        try:
+            return self.get(**{f"{field}__iexact": (username or "").strip()})
+        except self.model.MultipleObjectsReturned as exc:
+            raise self.model.DoesNotExist("Plusieurs comptes ne diffèrent que par la casse.") from exc
+
 
 class User(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -46,6 +63,13 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(auto_now_add=True)
+    # Acceptation des CGU/CGV et de la politique de confidentialité (horodatée, versionnée).
+    accepted_terms_at = models.DateTimeField(null=True, blank=True)
+    terms_version = models.CharField(max_length=20, blank=True)
+    # Changement / réinitialisation du mot de passe : toute session (refresh token) ouverte
+    # avant cette date est refusée, y compris les jetons issus d'une rotation que la liste
+    # noire de simplejwt ne connaît pas (cf. SessionTokenRefreshSerializer).
+    sessions_revoked_at = models.DateTimeField(null=True, blank=True)
 
     objects = UserManager()
 
@@ -70,9 +94,27 @@ class Organization(TimeStampedModel):
         null=True,
         related_name="organizations_created",
     )
+    # Numéro WhatsApp du contact, normalisé (+237…) : relance des essais et un seul essai
+    # gratuit par numéro (cf. accounts.services.register_organization_owner).
+    contact_phone = models.CharField(max_length=20, blank=True, db_index=True)
+    # Fermeture demandée par le propriétaire : l'organisation n'est plus accessible (cf.
+    # core.permissions.OrganizationContextMixin) ; le staff purge les données ensuite.
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    closure_reason = models.TextField(blank=True)
 
     class Meta:
         ordering = ["name"]
+
+    @property
+    def is_closed(self):
+        return self.closed_at is not None
 
     def save(self, *args, **kwargs):
         if not self.slug:

@@ -17,9 +17,49 @@ export function setUnauthorizedHandler(handler: () => void) {
   onUnauthorized = handler
 }
 
+/* Organisation courante : un compte peut appartenir à plusieurs organisations. Celle choisie
+ * est envoyée dans l'en-tête X-Organization-Id de chaque requête et mémorisée dans le
+ * navigateur (retrouvée à la prochaine visite). */
+const ORGANIZATION_STORAGE_KEY = 'revue-de-presse.organization'
+/** Codes renvoyés par l'API quand l'organisation demandée n'est plus accessible (membre
+ * retiré, organisation fermée) ou doit être choisie (cf. backend core/permissions.py). */
+const ORGANIZATION_ERROR_CODES = ['organization_required', 'organization_access_lost', 'no_organization']
+
+function readStoredOrganizationId(): string | null {
+  try {
+    return window.localStorage.getItem(ORGANIZATION_STORAGE_KEY)
+  } catch {
+    return null // stockage indisponible (navigation privée stricte…)
+  }
+}
+
+let organizationId: string | null = readStoredOrganizationId()
+let onOrganizationLost: (() => void) | null = null
+
+export function getOrganizationId() {
+  return organizationId
+}
+
+export function setOrganizationId(id: string | null) {
+  organizationId = id
+  try {
+    if (id) window.localStorage.setItem(ORGANIZATION_STORAGE_KEY, id)
+    else window.localStorage.removeItem(ORGANIZATION_STORAGE_KEY)
+  } catch {
+    // Stockage indisponible : le choix vaut pour cet onglet seulement.
+  }
+}
+
+export function setOrganizationLostHandler(handler: () => void) {
+  onOrganizationLost = handler
+}
+
 apiClient.interceptors.request.use((config) => {
   if (accessToken) {
     config.headers.set('Authorization', `Bearer ${accessToken}`)
+  }
+  if (organizationId) {
+    config.headers.set('X-Organization-Id', organizationId)
   }
   return config
 })
@@ -62,6 +102,12 @@ apiClient.interceptors.response.use(
         return apiClient(original)
       }
       onUnauthorized?.()
+    }
+    const code = (error.response?.data as ApiErrorBody | undefined)?.code
+    if (code && ORGANIZATION_ERROR_CODES.includes(code)) {
+      // Membre retiré, organisation fermée… : on recharge la liste des organisations au lieu
+      // de laisser l'appli à moitié ouverte.
+      onOrganizationLost?.()
     }
     return Promise.reject(error)
   },

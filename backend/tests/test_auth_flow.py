@@ -10,6 +10,8 @@ def test_register_creates_owner_and_sets_refresh_cookie(api_client):
             "password": "a-very-strong-pass-1",
             "full_name": "Founder",
             "organization_name": "Acme SARL",
+            "phone_number": "6 93 00 00 01",
+            "accept_terms": True,
         },
     )
 
@@ -89,7 +91,7 @@ def test_invitation_register_joins_existing_organization_not_a_new_one(api_clien
 
     response = api_client.post(
         f"/api/auth/invitations/{invitation.token}/register/",
-        {"full_name": "Invitee", "password": "another-strong-pass-1"},
+        {"full_name": "Invitee", "password": "another-strong-pass-1", "accept_terms": True},
     )
 
     assert response.status_code == 201

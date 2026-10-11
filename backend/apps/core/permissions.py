@@ -1,3 +1,5 @@
+import uuid
+
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.permissions import BasePermission
 
@@ -26,24 +28,46 @@ class OrganizationContextMixin:
         if not request.user or not request.user.is_authenticated:
             return None
 
-        memberships = Membership.objects.filter(user=request.user).select_related("organization")
+        # Une organisation fermée par son propriétaire n'est plus accessible à personne.
+        memberships = Membership.objects.filter(
+            user=request.user, organization__closed_at__isnull=True
+        ).select_related("organization")
         org_id = request.headers.get("X-Organization-Id")
 
+        # `code` (en plus de `detail`) : le frontend recharge la liste des organisations de
+        # l'utilisateur (GET /api/organizations/) au lieu d'afficher une erreur technique.
         if org_id:
-            membership = memberships.filter(organization_id=org_id).first()
+            membership = memberships.filter(organization_id=org_id).first() if _is_uuid(org_id) else None
             if membership is None:
-                raise PermissionDenied("Vous n'êtes pas membre de cette organisation.")
+                raise PermissionDenied(
+                    {
+                        "detail": "Vous n'avez plus accès à cette organisation.",
+                        "code": "organization_access_lost",
+                    }
+                )
             return membership.organization
 
         count = memberships.count()
         if count == 1:
             return memberships.first().organization
         if count == 0:
-            raise NotFound("Aucune organisation associée à cet utilisateur.")
+            raise NotFound(
+                {"detail": "Vous ne faites partie d'aucune organisation active.", "code": "no_organization"}
+            )
         raise PermissionDenied(
-            "Plusieurs organisations disponibles pour cet utilisateur : "
-            "précisez l'en-tête X-Organization-Id."
+            {
+                "detail": "Vous appartenez à plusieurs organisations : choisissez celle à utiliser.",
+                "code": "organization_required",
+            }
         )
+
+
+def _is_uuid(value):
+    try:
+        uuid.UUID(str(value))
+    except ValueError:
+        return False
+    return True
 
 
 class IsOrgMember(BasePermission):

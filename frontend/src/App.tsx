@@ -20,6 +20,8 @@ const SettingsPage = lazy(() => import('./routes/SettingsPage'))
 const TeamPage = lazy(() => import('./routes/TeamPage'))
 const TermsPage = lazy(() => import('./routes/TermsPage'))
 const UploadPage = lazy(() => import('./routes/UploadPage'))
+const ForgotPasswordPage = lazy(() => import('./routes/ForgotPasswordPage'))
+const ResetPasswordPage = lazy(() => import('./routes/ResetPasswordPage'))
 
 export default function App() {
   return (
@@ -33,6 +35,8 @@ export default function App() {
         <Route path="/cgu" element={<TermsPage />} />
         <Route path="/confidentialite" element={<PrivacyPage />} />
         <Route path="/mentions-legales" element={<LegalNoticePage />} />
+        <Route path="/mot-de-passe-oublie" element={<ForgotPasswordPage />} />
+        <Route path="/reinitialiser-mot-de-passe/:uid/:token" element={<ResetPasswordPage />} />
 
         <Route
           element={

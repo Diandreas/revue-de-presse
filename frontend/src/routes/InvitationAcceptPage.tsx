@@ -11,6 +11,7 @@ import { useAuth } from '../auth/useAuth'
 import { AuthShell } from '../components/AuthShell'
 import { ArrowRightIcon, MailIcon, UsersIcon } from '../components/icons'
 import { PasswordInput } from '../components/PasswordInput'
+import { TermsCheckbox } from '../components/TermsCheckbox'
 import { Alert, FullPageLoader, Spinner } from '../components/ui'
 
 interface InvitationPreview {
@@ -24,13 +25,14 @@ const ROLE_LABELS: Record<string, string> = { owner: 'propriétaire', admin: 'ad
 const registerSchema = z.object({
   full_name: z.string().trim().min(2, 'Votre nom est requis.'),
   password: z.string().min(10, 'Au moins 10 caractères.'),
+  accept_terms: z.boolean().refine((value) => value, 'Vous devez accepter les conditions pour créer votre compte.'),
 })
 
 type RegisterFormValues = z.infer<typeof registerSchema>
 
 export default function InvitationAcceptPage() {
   const { token } = useParams<{ token: string }>()
-  const { user, isLoading, refreshOrganization } = useAuth()
+  const { user, isLoading, refreshOrganization, switchOrganization } = useAuth()
   const navigate = useNavigate()
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -46,11 +48,13 @@ export default function InvitationAcceptPage() {
 
   const acceptMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiClient.post(`/auth/invitations/${token}/accept/`)
+      const res = await apiClient.post<Membership>(`/auth/invitations/${token}/accept/`)
       return res.data
     },
-    onSuccess: async () => {
-      await refreshOrganization()
+    onSuccess: async (membership) => {
+      // Le compte peut déjà appartenir à une autre organisation : on bascule sur celle rejointe.
+      if (membership.organization) await switchOrganization(membership.organization)
+      else await refreshOrganization()
       navigate('/dashboard', { replace: true })
     },
     onError: (error) => setActionError(extractErrorMessage(error, 'Impossible d’accepter cette invitation.')),
@@ -75,7 +79,7 @@ export default function InvitationAcceptPage() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<RegisterFormValues>({ resolver: zodResolver(registerSchema) })
+  } = useForm<RegisterFormValues>({ resolver: zodResolver(registerSchema), defaultValues: { accept_terms: false } })
 
   if (isLoading || previewQuery.isLoading) {
     return <FullPageLoader />
@@ -185,6 +189,7 @@ export default function InvitationAcceptPage() {
             <p className="field-hint">10 caractères minimum.</p>
           )}
         </div>
+        <TermsCheckbox id="inv-terms" error={errors.accept_terms?.message} {...register('accept_terms')} />
         {actionError && <Alert tone="danger">{actionError}</Alert>}
         <button type="submit" disabled={registerMutation.isPending} className="btn-primary btn-lg w-full">
           {registerMutation.isPending ? <Spinner /> : null}
