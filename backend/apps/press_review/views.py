@@ -165,6 +165,14 @@ class JobListCreateView(OrganizationContextMixin, generics.ListCreateAPIView):
 
         serializer = JobCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        # Plafonds de taille de la formule (documents / pages) : refus clair AVANT l'analyse.
+        from apps.ai_pipeline.limits import review_size_denial
+
+        size_denial = review_size_denial(
+            organization=request.organization, document_ids=serializer.validated_data["document_ids"]
+        )
+        if size_denial:
+            raise ValidationError(size_denial)
         try:
             job, _documents = create_press_review_job(
                 organization=request.organization,
@@ -231,11 +239,21 @@ class JobHighlightsView(OrganizationContextMixin, generics.ListAPIView):
 
     def get_queryset(self):
         job = get_object_or_404(PressReviewJob, pk=self.kwargs["pk"], organization=self.request.organization)
+        self.job = job
         qs = Highlight.objects.filter(job=job).select_related("category")
         category_type = self.request.query_params.get("category")
         if category_type:
             qs = qs.filter(category__type=category_type)
         return qs
+
+    def get_serializer_context(self):
+        # Nom du journal de chaque document (`source_name`), calculé une fois pour la liste.
+        from apps.ai_pipeline.attribution import newspaper_names
+
+        context = super().get_serializer_context()
+        job = getattr(self, "job", None)
+        context["source_names"] = newspaper_names(job) if job is not None else {}
+        return context
 
 
 class JobReviewView(OrganizationContextMixin, APIView):

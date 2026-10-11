@@ -26,6 +26,11 @@ os.environ["CELERY_RESULT_BACKEND"] = CELERY_RESULT_BACKEND
 # Sans ça : quota Mistral consommé par la suite de tests, flakiness (rate limiting),
 # risque d'appels Stripe/CamPay réels pendant `pytest`.
 MISTRAL_API_KEY = ""
+MISTRAL_ALLOW_FAKE_CLIENT = True  # DEBUG=False ici : le client factice doit être explicitement permis
+# Limiteur de débit IA coupé : ses compteurs (cache mémoire) survivraient d'un test à l'autre.
+# tests/test_ai_cost_control.py le teste explicitement.
+AI_RATE_LIMIT_GLOBAL_PER_MINUTE = 0
+AI_RATE_LIMIT_ORG_PER_MINUTE = 0
 OCR_ENGINE = "tesseract"  # jamais d'appel Mistral pour lire une image en test (les tests stubent pytesseract)
 STRIPE_SECRET_KEY = ""
 CAMPAY_APP_USERNAME = ""

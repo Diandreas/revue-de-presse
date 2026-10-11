@@ -2,9 +2,14 @@
 retry est centralisée ici pour que le reste du pipeline manipule des dicts Python.
 
 `get_mistral_client()` est le seul point d'entrée à utiliser ailleurs dans le code :
-il bascule automatiquement sur `FakeMistralClient` si `MISTRAL_API_KEY` est vide,
-pour que le pipeline reste démontrable sans clé réelle (et pour que les tests ne
-frappent jamais l'API réseau)."""
+il bascule sur `FakeMistralClient` si `MISTRAL_API_KEY` est vide, pour que le pipeline
+reste démontrable sans clé réelle (et pour que les tests ne frappent jamais l'API
+réseau) — mais seulement là où c'est permis (`MISTRAL_ALLOW_FAKE_CLIENT`, par défaut en
+DEBUG) : en production, une clé manquante fait échouer la revue avec un message
+d'administrateur au lieu de livrer une revue « [MOCK] » à un client.
+
+Chaque appel réel passe par le limiteur de débit (ratelimit.py) et est journalisé avec
+ses jetons (usage.py)."""
 import base64
 import json
 import logging
@@ -14,7 +19,10 @@ import time
 from django.conf import settings
 from pydantic import ValidationError
 
-from .errors import OcrUnavailableError, is_quota_blocked, status_code_of
+from .errors import AIUnavailableError, OcrUnavailableError, is_quota_blocked, status_code_of
+from .prompts.source_text import unwrap_source
+from .ratelimit import acquire_ai_slot
+from .usage import OPERATION_JSON, OPERATION_JSON_REPAIR, OPERATION_VISION, record_ai_call
 
 logger = logging.getLogger(__name__)
 
@@ -65,18 +73,29 @@ class MistralClient:
             self._client = Mistral(api_key=self.api_key, timeout_ms=REQUEST_TIMEOUT_MS)
         return self._client
 
-    def _chat_complete(self, **kwargs):
-        """Appel SDK avec réessai/backoff sur 429."""
+    def _chat_complete(self, *, operation=OPERATION_JSON, **kwargs):
+        """Appel SDK avec réessai/backoff sur 429.
+
+        Chaque tentative passe d'abord par le limiteur de débit (global + par organisation,
+        cf. ratelimit.py), puis est journalisée — jetons, durée, échec éventuel — pour le
+        suivi du coût (cf. usage.py)."""
+        model = kwargs.get("model") or self.model
         for attempt in range(RATE_LIMIT_MAX_RETRIES + 1):
+            acquire_ai_slot()  # hors du try : une saturation remonte telle quelle (relance Celery)
+            started = time.monotonic()
             try:
-                return self.client.chat.complete(**kwargs)
+                response = self.client.chat.complete(**kwargs)
             except Exception as exc:  # noqa: BLE001 - le SDK lève des types variés
+                record_ai_call(model=model, operation=operation, started=started, error=exc)
                 # Un quota à 0 (modèle fermé à l'offre) est permanent : inutile d'attendre.
                 if status_code_of(exc) != 429 or is_quota_blocked(exc) or attempt == RATE_LIMIT_MAX_RETRIES:
                     raise
                 delay = RATE_LIMIT_BACKOFF_SECONDS[min(attempt, len(RATE_LIMIT_BACKOFF_SECONDS) - 1)]
                 logger.warning("Mistral 429 (tentative %s), nouvelle tentative dans %ss.", attempt + 1, delay)
                 time.sleep(delay)
+                continue
+            record_ai_call(model=model, operation=operation, started=started, response=response)
+            return response
 
     def complete_json(self, *, system_prompt, user_prompt, response_hint=None, temperature=0.2):
         response = self._chat_complete(
@@ -96,6 +115,7 @@ class MistralClient:
         "" si le modèle déclare qu'il n'y a aucun texte."""
         data_url = "data:image/jpeg;base64," + base64.b64encode(jpeg_bytes).decode("ascii")
         response = self._chat_complete(
+            operation=OPERATION_VISION,
             model=model or settings.MISTRAL_VISION_MODEL,
             temperature=0,
             max_tokens=8192,
@@ -117,6 +137,7 @@ class MistralClient:
         except (TypeError, json.JSONDecodeError):
             logger.warning("Réponse Mistral non-JSON, tentative de correction.")
             fixed = self._chat_complete(
+                operation=OPERATION_JSON_REPAIR,
                 model=self.model,
                 temperature=0,
                 response_format={"type": "json_object"},
@@ -177,11 +198,46 @@ class FakeMistralClient(MistralClient):
         factory = self._MOCK_RESPONSES.get(response_hint)
         if factory is None:
             return {"detail": "[MOCK] Réponse factice générique — configurez MISTRAL_API_KEY."}
-        return factory()
+        response = factory()
+        if response_hint == "highlight_detection":
+            # Les extraits sont vérifiés dans le texte source (grounding.py) : un extrait
+            # factice serait écarté. Le mock cite donc la 1re phrase du texte, tel quel ;
+            # seule l'explication est factice (et le dit).
+            sentence = _first_sentence(unwrap_source(user_prompt))
+            if sentence:
+                response["highlights"][0].update(
+                    excerpt=sentence,
+                    explanation="[MOCK] Passage cité tel quel — configurez MISTRAL_API_KEY pour une vraie analyse.",
+                )
+        return response
+
+
+_SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
+
+
+def _first_sentence(text, max_chars=200):
+    for sentence in _SENTENCE_END.split(" ".join((text or "").split())):
+        if len(sentence.split()) >= 4:
+            return sentence[:max_chars].rsplit(" ", 1)[0] if len(sentence) > max_chars else sentence
+    return ""
+
+
+def fake_client_allowed():
+    """`MISTRAL_ALLOW_FAKE_CLIENT` ; non renseigné = autorisé seulement en DEBUG."""
+    allowed = getattr(settings, "MISTRAL_ALLOW_FAKE_CLIENT", None)
+    return bool(settings.DEBUG if allowed is None else allowed)
 
 
 def get_mistral_client():
     if not settings.MISTRAL_API_KEY:
+        if not fake_client_allowed():
+            raise AIUnavailableError(
+                "MISTRAL_API_KEY vide et client factice interdit (MISTRAL_ALLOW_FAKE_CLIENT).",
+                user_message=(
+                    "Le service d'IA n'est pas configuré sur le serveur (clé Mistral manquante). Ce "
+                    "n'est pas un problème de vos fichiers : contactez l'administrateur de la plateforme."
+                ),
+            )
         logger.info("MISTRAL_API_KEY non configurée : utilisation de FakeMistralClient.")
         return FakeMistralClient()
     return MistralClient()

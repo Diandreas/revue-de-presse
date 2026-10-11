@@ -6,3 +6,6 @@ class AiPipelineConfig(AppConfig):
     name = "apps.ai_pipeline"
     label = "ai_pipeline"
     verbose_name = "Pipeline IA"
+
+    def ready(self):
+        from . import checks  # noqa: F401 - enregistre les vérifications de configuration

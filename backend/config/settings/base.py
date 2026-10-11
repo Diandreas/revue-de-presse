@@ -217,6 +217,37 @@ MISTRAL_REVIEW_MODEL = env("MISTRAL_REVIEW_MODEL", default="ministral-14b-latest
 # Moteur de lecture des photos : auto (Mistral si clé présente, sinon Tesseract) | mistral | tesseract
 OCR_ENGINE = env("OCR_ENGINE", default="auto")
 
+# --- Pipeline IA : fiabilité, charge et coût (cf. apps/ai_pipeline, docs/pipeline.md) ---
+# Client factice ([MOCK]) quand MISTRAL_API_KEY est vide : non renseigné = seulement en DEBUG.
+# En production, une clé manquante fait échouer la revue avec un message d'administrateur.
+MISTRAL_ALLOW_FAKE_CLIENT = env.bool("MISTRAL_ALLOW_FAKE_CLIENT", default=None)
+# Points clés : modèle le plus fidèle, température 0 (citations exactes), puis filtres
+# (extrait retrouvé dans le texte, longueur, nom de journal, confiance minimale).
+MISTRAL_HIGHLIGHT_MODEL = env("MISTRAL_HIGHLIGHT_MODEL", default=MISTRAL_REVIEW_MODEL)
+HIGHLIGHT_TEMPERATURE = env.float("HIGHLIGHT_TEMPERATURE", default=0.0)
+HIGHLIGHT_MIN_CONFIDENCE = env.float("HIGHLIGHT_MIN_CONFIDENCE", default=0.5)
+HIGHLIGHT_MIN_EXCERPT_WORDS = env.int("HIGHLIGHT_MIN_EXCERPT_WORDS", default=3)
+HIGHLIGHT_EXCERPT_MIN_SIMILARITY = env.float("HIGHLIGHT_EXCERPT_MIN_SIMILARITY", default=0.88)
+# Limiteur de débit des appels Mistral (requêtes/minute, 0 = sans limite), partagé entre
+# workers via le cache Django (Redis en prod) ; au-delà de l'attente max, l'étape est relancée.
+AI_RATE_LIMIT_GLOBAL_PER_MINUTE = env.int("AI_RATE_LIMIT_GLOBAL_PER_MINUTE", default=60)
+AI_RATE_LIMIT_ORG_PER_MINUTE = env.int("AI_RATE_LIMIT_ORG_PER_MINUTE", default=30)
+AI_RATE_LIMIT_MAX_WAIT_SECONDS = env.int("AI_RATE_LIMIT_MAX_WAIT_SECONDS", default=90)
+AI_RATE_LIMIT_CACHE = env("AI_RATE_LIMIT_CACHE", default="default")
+# Plafonds par revue selon la formule (code du plan ; « default » pour les autres) et
+# longueur maximale d'un PDF. Vérifiés avant le lancement de l'analyse.
+AI_MAX_PDF_PAGES = env.int("AI_MAX_PDF_PAGES", default=100)
+AI_REVIEW_LIMITS = env.json("AI_REVIEW_LIMITS", default={
+    "default": {"max_documents": 30, "max_pages": 80},
+    "starter": {"max_documents": 20, "max_pages": 40},
+    "pro": {"max_documents": 40, "max_pages": 120},
+    "enterprise": {"max_documents": 50, "max_pages": 250},
+})
+# Journal des appels IA (AIUsage) et tarifs $/million de jetons pour l'estimation du coût
+# (JSON {"modèle": [entrée, sortie]}, s'ajoute aux tarifs indicatifs d'ai_pipeline/usage.py).
+AI_USAGE_TRACKING = env.bool("AI_USAGE_TRACKING", default=True)
+AI_TOKEN_PRICES_USD = env.json("AI_TOKEN_PRICES_USD", default={})
+
 # --- Stripe ---
 STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
 STRIPE_PUBLISHABLE_KEY = env("STRIPE_PUBLISHABLE_KEY", default="")
