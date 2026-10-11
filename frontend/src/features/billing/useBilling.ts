@@ -1,7 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { apiClient } from '../../api/client'
-import type { Invoice, Paginated, Plan, Subscription } from '../../api/types'
+import type { BillingProfile, Invoice, Paginated, Plan, Subscription } from '../../api/types'
+
+/* Facturation en mode manuel : aucun paiement en ligne. Le client contacte l'équipe
+ * (WhatsApp) qui active / prolonge l'abonnement depuis l'administration. */
 
 export function usePlans() {
   return useQuery({
@@ -38,66 +41,55 @@ export function useInvoices() {
   })
 }
 
-export interface CheckoutResult {
-  provider: string
-  mock?: boolean
-  checkout_url?: string | null
-  reference?: string | null
-  invoice_id?: string
-  detail?: string
-}
-
-export function useCheckoutStripe() {
-  const queryClient = useQueryClient()
+/** Télécharge le PDF d'une facture (requête authentifiée, puis enregistrement local). */
+export function useDownloadInvoicePdf() {
   return useMutation({
-    mutationFn: async (planCode: string) => {
-      const res = await apiClient.post<CheckoutResult>('/billing/checkout/stripe/', { plan_code: planCode })
-      return res.data
-    },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['subscription'] }),
-  })
-}
-
-export function useCheckoutMobileMoney() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async (input: { planCode: string; phoneNumber: string }) => {
-      const res = await apiClient.post<CheckoutResult>('/billing/checkout/mobile-money/', {
-        plan_code: input.planCode,
-        phone_number: input.phoneNumber,
-      })
-      return res.data
-    },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['subscription'] }),
-  })
-}
-
-export function useCheckoutBankTransfer() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async (planCode: string) => {
-      const res = await apiClient.post<CheckoutResult>('/billing/checkout/bank-transfer/', { plan_code: planCode })
-      return res.data
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['subscription'] })
-      void queryClient.invalidateQueries({ queryKey: ['invoices'] })
+    mutationFn: async (invoice: Invoice) => {
+      let res
+      try {
+        res = await apiClient.get<Blob>(`/billing/invoices/${invoice.id}/pdf/`, { responseType: 'blob' })
+      } catch (error) {
+        // En mode blob, le message d'erreur JSON du serveur arrive lui aussi en Blob : on le
+        // relit pour que extractErrorMessage affiche le vrai motif.
+        if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
+          try {
+            error.response.data = JSON.parse(await error.response.data.text())
+          } catch {
+            // corps non JSON : message générique
+          }
+        }
+        throw error
+      }
+      const url = URL.createObjectURL(res.data)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${invoice.number ?? 'facture'}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
     },
   })
 }
 
-export function useUploadInvoiceProof() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async ({ invoiceId, file }: { invoiceId: string; file: File }) => {
-      const formData = new FormData()
-      formData.append('proof', file)
-      const res = await apiClient.post<Invoice>(`/billing/invoices/${invoiceId}/proof/`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
+export function useBillingProfile() {
+  return useQuery({
+    queryKey: ['billing-profile'],
+    queryFn: async () => {
+      const res = await apiClient.get<BillingProfile>('/billing/profile/')
       return res.data
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+  })
+}
+
+export function useUpdateBillingProfile() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (profile: Omit<BillingProfile, 'updated_at'>) => {
+      const res = await apiClient.put<BillingProfile>('/billing/profile/', profile)
+      return res.data
+    },
+    onSuccess: (data) => queryClient.setQueryData(['billing-profile'], data),
   })
 }
 
@@ -108,6 +100,17 @@ export function useCancelSubscription() {
       const res = await apiClient.post<Subscription>('/billing/subscription/cancel/')
       return res.data
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['subscription'] }),
+    onSuccess: (data) => queryClient.setQueryData(['subscription'], data),
+  })
+}
+
+export function useResumeSubscription() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const res = await apiClient.post<Subscription>('/billing/subscription/resume/')
+      return res.data
+    },
+    onSuccess: (data) => queryClient.setQueryData(['subscription'], data),
   })
 }

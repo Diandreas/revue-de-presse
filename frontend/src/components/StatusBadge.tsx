@@ -32,16 +32,16 @@ const JOB_STATUS_LABELS: Record<string, { label: string; tone: Tone; pulse?: boo
 const SUBSCRIPTION_STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
   trialing: { label: 'Essai gratuit', tone: 'brand' },
   active: { label: 'Active', tone: 'green' },
-  past_due: { label: 'Paiement en retard', tone: 'amber' },
-  canceled: { label: 'Annulée', tone: 'red' },
-  incomplete: { label: 'En attente de paiement', tone: 'amber' },
+  past_due: { label: 'À renouveler', tone: 'amber' },
+  canceled: { label: 'Résiliée', tone: 'red' },
+  incomplete: { label: 'En attente d’activation', tone: 'amber' },
 }
 
 const INVOICE_STATUS_LABELS: Record<string, { label: string; tone: Tone }> = {
   pending: { label: 'À régler', tone: 'amber' },
   pending_review: { label: 'Justificatif en vérification', tone: 'brand' },
   paid: { label: 'Payée', tone: 'green' },
-  failed: { label: 'Échouée', tone: 'red' },
+  failed: { label: 'Annulée', tone: 'red' },
   refunded: { label: 'Remboursée', tone: 'slate' },
 }
 

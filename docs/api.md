@@ -41,18 +41,26 @@ plusieurs organisations — voir `apps/core/permissions.py`).
 
 ## Facturation (`apps/billing/urls.py`, préfixe `/api/billing/`)
 
+Mode par défaut `BILLING_MODE=manual` : aucun paiement en ligne. Les routes `checkout/*` et
+`invoices/{id}/proof/` répondent **403** avec un message renvoyant vers WhatsApp ; l'équipe
+active / prolonge les abonnements dans `/admin/billing/subscription/` (voir
+`docs/facturation-manuelle.md`).
+
 | Méthode | Route | Description |
 |---|---|---|
-| GET | `plans/` | Plans actifs. |
-| GET | `subscription/` | Abonnement de l'organisation courante. |
-| POST | `subscription/cancel/` | Annule l'abonnement. |
-| GET | `invoices/` | Factures de l'organisation. |
-| POST | `invoices/{id}/proof/` | Téléverse un justificatif de virement. |
-| POST | `invoices/{id}/review/` | Valide/rejette un virement (réservé `is_staff`, équipe plateforme). |
-| POST | `checkout/stripe/` | `{plan_code}` → URL de Stripe Checkout. |
-| POST | `checkout/mobile-money/` | `{plan_code, phone_number}` → demande de collecte CamPay. |
-| POST | `checkout/bank-transfer/` | `{plan_code}` → facture à régler par virement. |
-| POST | `webhooks/stripe/`, `webhooks/campay/` | Webhooks publics (signature vérifiée). |
+| GET | `plans/` | Formules actives et leurs limites (public). `price_amount` vaut `null` pour tout non-staff (tarifs « sur devis »). |
+| GET | `subscription/` | Abonnement de l'organisation courante : statut, période, `has_access`, `access_until` (fin + délai de grâce), revues du mois, `seats_used` / `seats_limit`. |
+| POST | `subscription/cancel/` | Résiliation (owner/admin) : une période payée en cours va jusqu'à son terme (`cancel_at_period_end`) ; essai résilié tout de suite. |
+| POST | `subscription/resume/` | Annule une résiliation programmée. |
+| GET/PUT/PATCH | `profile/` | Informations de facturation (raison sociale, NIU, RCCM…) ; écriture owner/admin. |
+| GET | `invoices/` | Factures de l'organisation (numéro, HT / TVA / TTC). |
+| GET | `invoices/{id}/pdf/` | PDF de la facture (membres de l'organisation et staff ; 503 si WeasyPrint indisponible). |
+| POST | `invoices/{id}/proof/` | Justificatif de virement, sur une facture `pending` uniquement (mode `online`). |
+| POST | `invoices/{id}/review/` | `{approve: bool, reason?}` : valide (formule de la facture + contrôle du montant) ou refuse un virement (réservé `is_staff`). |
+| POST | `checkout/stripe/` | `{plan_code}` → URL de Stripe Checkout (mode `online`). |
+| POST | `checkout/mobile-money/` | `{plan_code, phone_number}` → demande de collecte CamPay (mode `online`). |
+| POST | `checkout/bank-transfer/` | `{plan_code}` → facture à régler par virement (mode `online`). |
+| POST | `webhooks/stripe/`, `webhooks/campay/` | Webhooks publics : fermés (403) tant que `STRIPE_WEBHOOK_SECRET` / `CAMPAY_WEBHOOK_SECRET` sont vides, signature vérifiée sinon. |
 
 ## Divers
 

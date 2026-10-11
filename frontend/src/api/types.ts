@@ -163,14 +163,15 @@ export interface Plan {
   id: string
   code: string
   name: string
-  price_amount: string
+  /** Toujours null côté client : formules « sur devis » (prix visible du seul staff). */
+  price_amount: string | null
   currency: string
   billing_interval: string
   max_reviews_per_month: number
   max_seats: number
 }
 
-export type SubscriptionProviderName = 'stripe' | 'mobile_money' | 'bank_transfer'
+export type SubscriptionProviderName = 'stripe' | 'mobile_money' | 'bank_transfer' | 'manual'
 
 export interface Subscription {
   id: string
@@ -185,19 +186,43 @@ export interface Subscription {
   reviews_limit: number
   /** Formule demandée lors d'un paiement, appliquée une fois le paiement confirmé. */
   pending_plan_code: string | null
+  /** Accès au service selon le serveur (fin de période + délai de grâce compris). */
+  has_access: boolean
+  /** Date de coupure de l'accès (fin de période + grâce ; fin exacte pour un essai). */
+  access_until: string | null
+  seats_used: number
+  seats_limit: number
 }
 
 export interface Invoice {
   id: string
+  /** Numéro séquentiel, ex. RDP-2026-0001. */
+  number: string | null
   provider: SubscriptionProviderName
+  plan_name: string | null
+  months: number
+  /** Montant TTC. */
   amount: string
+  amount_ht: string | null
+  vat_rate: string | null
+  vat_amount: string | null
   currency: string
   status: 'pending' | 'pending_review' | 'paid' | 'failed' | 'refunded'
   period_start: string
   period_end: string
   paid_at: string | null
-  proof_file: string | null
   created_at: string
+}
+
+/** Identité légale de l'entreprise, reportée sur ses factures. */
+export interface BillingProfile {
+  legal_name: string
+  address: string
+  niu: string
+  rccm: string
+  email: string
+  phone: string
+  updated_at: string | null
 }
 
 export interface Paginated<T> {

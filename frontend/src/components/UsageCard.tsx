@@ -2,9 +2,9 @@ import clsx from 'clsx'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
-import { usageStateOf } from '../features/billing/usage'
+import { usageStateOf, type UsageState } from '../features/billing/usage'
 import { useSubscription } from '../features/billing/useBilling'
-import { plural } from '../lib/format'
+import { formatDate, plural } from '../lib/format'
 import { AlertTriangleIcon, GiftIcon, ZapIcon } from './icons'
 import { ProgressBar } from './ui'
 import { WhatsAppButton } from './WhatsAppButton'
@@ -22,6 +22,7 @@ export function SidebarUsageCard({ onNavigate }: { onNavigate?: () => void }) {
 
   if (state.kind === 'trial' || state.kind === 'active') {
     const ratio = state.limit ? (state.used / state.limit) * 100 : 0
+    const renewSoon = state.kind === 'active' && (state.overdue || (state.daysLeft !== null && state.daysLeft <= 7))
     return (
       <Link to="/billing" onClick={onNavigate} className={box}>
         <div className="flex items-center gap-2 text-xs font-semibold text-white">
@@ -36,10 +37,15 @@ export function SidebarUsageCard({ onNavigate }: { onNavigate?: () => void }) {
               {state.daysLeft > 0 ? `${plural(state.daysLeft, 'jour')}` : 'dernier jour'}
             </span>
           )}
+          {renewSoon && (
+            <span className="ml-auto rounded-full bg-amber-300/15 px-2 py-0.5 text-[10px] font-semibold text-amber-200">
+              À renouveler
+            </span>
+          )}
         </div>
         <ProgressBar percent={ratio} tone="light" size="sm" className="mt-3" />
         <p className="mt-2 text-[11px] text-slate-400 tabular-nums">
-          {state.used} / {state.limit} revues utilisées
+          {state.used} / {state.limit} revues ce mois-ci
         </p>
       </Link>
     )
@@ -49,49 +55,77 @@ export function SidebarUsageCard({ onNavigate }: { onNavigate?: () => void }) {
     <Link to="/billing" onClick={onNavigate} className={clsx(box, 'border-amber-300/20')}>
       <div className="flex items-center gap-2 text-xs font-semibold text-amber-200">
         <AlertTriangleIcon className="h-4 w-4" />
-        {state.kind === 'trial-expired' ? 'Essai terminé' : 'Aucun abonnement actif'}
+        {state.kind === 'trial-expired'
+          ? 'Essai terminé'
+          : state.kind === 'expired'
+            ? 'Abonnement échu'
+            : 'Aucun abonnement actif'}
       </div>
       <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400">
-        Choisissez une formule pour continuer à générer des revues.
+        {state.kind === 'expired'
+          ? 'Contactez-nous pour renouveler et continuer à générer des revues.'
+          : 'Contactez-nous pour souscrire et continuer à générer des revues.'}
       </p>
     </Link>
   )
 }
 
-/** Bandeau du tableau de bord quand l'essai touche à sa fin ou que le quota est presque atteint. */
-export function UsageBanner() {
-  const { data: subscription, isLoading } = useSubscription()
-  const state = usageStateOf(subscription, isLoading)
-
-  if (state.kind === 'trial' && state.daysLeft <= 3) {
-    return (
-      <BannerShell tone="amber">
-        Votre essai gratuit se termine {state.daysLeft <= 1 ? 'très bientôt' : `dans ${state.daysLeft} jours`}. Choisissez
-        une formule pour ne pas interrompre votre veille.
-      </BannerShell>
-    )
+/** Message du bandeau de tableau de bord (fin d'essai, échéance à J-7 / J-3, période
+ * échue, quota presque atteint), ou null si tout va bien. */
+function bannerFor(state: UsageState): { tone: 'amber' | 'red'; message: string } | null {
+  switch (state.kind) {
+    case 'trial-expired':
+      return { tone: 'red', message: 'Votre essai gratuit est terminé. Contactez-nous pour souscrire une formule.' }
+    case 'expired':
+      return {
+        tone: 'red',
+        message: `Votre abonnement a pris fin${state.endedOn ? ` le ${formatDate(state.endedOn)}` : ''}. Contactez-nous pour le renouveler.`,
+      }
+    case 'none':
+    case 'inactive':
+      return { tone: 'red', message: 'Votre organisation n’a pas d’abonnement actif. Contactez-nous pour souscrire.' }
+    case 'trial':
+      if (state.daysLeft <= 3) {
+        return {
+          tone: 'amber',
+          message: `Votre essai gratuit se termine ${state.daysLeft <= 1 ? 'très bientôt' : `dans ${state.daysLeft} jours`}. Contactez-nous pour souscrire sans interrompre votre veille.`,
+        }
+      }
+      break
+    case 'active':
+      if (state.overdue) {
+        return {
+          tone: 'red',
+          message: `Votre période d’abonnement est terminée : accès maintenu jusqu’au ${formatDate(state.accessUntil)}. Contactez-nous pour renouveler.`,
+        }
+      }
+      if (state.daysLeft !== null && state.daysLeft <= 7) {
+        return state.endsAtPeriodEnd
+          ? { tone: 'amber', message: `Votre abonnement résilié prend fin le ${formatDate(state.renewsOn)}.` }
+          : {
+              tone: state.daysLeft <= 3 ? 'red' : 'amber',
+              message: `Votre abonnement arrive à échéance ${state.daysLeft <= 1 ? 'demain' : `dans ${state.daysLeft} jours`} (le ${formatDate(state.renewsOn)}). Contactez-nous pour le renouveler.`,
+            }
+      }
+      break
+    default:
+      return null
   }
-  if ((state.kind === 'trial' || state.kind === 'active') && state.limit > 0 && state.used / state.limit >= 0.8) {
-    return (
-      <BannerShell tone={state.used >= state.limit ? 'red' : 'amber'}>
-        {state.used >= state.limit
-          ? `Quota atteint : ${state.limit} revues sur la période.`
-          : `${state.used} revues sur ${state.limit} utilisées sur la période.`}{' '}
-        Passez à une formule supérieure pour plus de revues.
-      </BannerShell>
-    )
-  }
-  if (state.kind === 'trial-expired' || state.kind === 'none' || state.kind === 'inactive') {
-    return (
-      <BannerShell tone="red">
-        {state.kind === 'trial-expired'
-          ? 'Votre essai gratuit est terminé.'
-          : 'Votre organisation n’a pas d’abonnement actif.'}{' '}
-        Choisissez une formule pour lancer de nouvelles revues.
-      </BannerShell>
-    )
+  if (state.limit > 0 && state.used / state.limit >= 0.8) {
+    const reached = state.used >= state.limit
+    return {
+      tone: reached ? 'red' : 'amber',
+      message: `${reached ? `Quota atteint : ${state.limit} revues ce mois-ci.` : `${state.used} revues sur ${state.limit} utilisées ce mois-ci.`} Contactez-nous pour passer à une formule supérieure.`,
+    }
   }
   return null
+}
+
+/** Bandeau du tableau de bord : renouvellement, fin d'essai ou quota presque atteint. */
+export function UsageBanner() {
+  const { data: subscription, isLoading } = useSubscription()
+  const banner = bannerFor(usageStateOf(subscription, isLoading))
+  return banner ? <BannerShell tone={banner.tone}>{banner.message}</BannerShell> : null
 }
 
 function BannerShell({ tone, children }: { tone: 'amber' | 'red'; children: ReactNode }) {
@@ -108,9 +142,9 @@ function BannerShell({ tone, children }: { tone: 'amber' | 'red'; children: Reac
         <span>{children}</span>
       </p>
       <div className="flex shrink-0 flex-wrap items-center gap-3">
-        <WhatsAppButton topic="billing" organizationName={organization?.name} variant="link" label="Nous écrire" />
+        <WhatsAppButton topic="billing" organizationName={organization?.name} variant="link" label="Nous contacter" />
         <Link to="/billing" className="btn-secondary btn-sm">
-          Voir les formules
+          Voir l’abonnement
         </Link>
       </div>
     </div>
