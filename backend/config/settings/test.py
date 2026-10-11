@@ -28,8 +28,22 @@ os.environ["CELERY_RESULT_BACKEND"] = CELERY_RESULT_BACKEND
 MISTRAL_API_KEY = ""
 OCR_ENGINE = "tesseract"  # jamais d'appel Mistral pour lire une image en test (les tests stubent pytesseract)
 STRIPE_SECRET_KEY = ""
+STRIPE_WEBHOOK_SECRET = ""
 CAMPAY_APP_USERNAME = ""
 CAMPAY_APP_PASSWORD = ""
+CAMPAY_WEBHOOK_SECRET = ""
+
+# Facturation : valeurs figées, indépendantes du .env de la machine (les tests du mode
+# « online » le réactivent explicitement).
+BILLING_MODE = "manual"
+BILLING_GRACE_DAYS = 3
+BILLING_VAT_RATE = "19.25"
+BILLING_INVOICE_PREFIX = "RDP"
+BILLING_SELLER_NAME = "Revue de Presse SARL"
+BILLING_SELLER_ADDRESS = "Douala, Cameroun"
+BILLING_SELLER_RCCM = "RC/DLA/2026/B/0001"
+BILLING_SELLER_NIU = "M012600000001A"
+BILLING_SELLER_EMAIL = "facturation@example.com"
 
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 

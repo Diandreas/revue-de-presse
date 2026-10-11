@@ -1,9 +1,18 @@
 from rest_framework import serializers
 
-from .models import Invoice, Plan, Subscription
+from .models import BillingProfile, Invoice, Plan, Subscription
+
+
+def _viewer_is_staff(context):
+    request = (context or {}).get("request")
+    user = getattr(request, "user", None)
+    return bool(user is not None and user.is_authenticated and user.is_staff)
 
 
 class PlanSerializer(serializers.ModelSerializer):
+    """Les prix ne sont jamais montrés aux clients (formules « sur devis ») : `price_amount`
+    vaut null pour tout utilisateur qui n'est pas membre de l'équipe (is_staff)."""
+
     class Meta:
         model = Plan
         fields = [
@@ -11,6 +20,12 @@ class PlanSerializer(serializers.ModelSerializer):
             "billing_interval", "max_reviews_per_month", "max_seats",
         ]
         read_only_fields = fields
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not _viewer_is_staff(self.context):
+            data["price_amount"] = None
+        return data
 
 
 class SubscriptionSerializer(serializers.ModelSerializer):
@@ -20,6 +35,11 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     reviews_limit = serializers.IntegerField(source="plan.max_reviews_per_month", read_only=True)
     # Formule demandée au paiement, appliquée seulement une fois le paiement confirmé.
     pending_plan_code = serializers.SerializerMethodField()
+    # Mêmes règles que le serveur (délai de grâce compris) : l'interface n'a rien à recalculer.
+    has_access = serializers.SerializerMethodField()
+    access_until = serializers.SerializerMethodField()
+    seats_used = serializers.SerializerMethodField()
+    seats_limit = serializers.IntegerField(source="plan.max_seats", read_only=True)
 
     class Meta:
         model = Subscription
@@ -27,6 +47,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
             "id", "plan", "provider", "status",
             "current_period_start", "current_period_end", "cancel_at_period_end",
             "is_trial", "reviews_used", "reviews_limit", "pending_plan_code",
+            "has_access", "access_until", "seats_used", "seats_limit",
         ]
         read_only_fields = fields
 
@@ -41,15 +62,41 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 
         return SubscriptionService.reviews_used(obj)
 
+    def get_has_access(self, obj):
+        from .services import SubscriptionService
+
+        return SubscriptionService.grants_access(obj)
+
+    def get_access_until(self, obj):
+        from .services import SubscriptionService
+
+        until = SubscriptionService.access_until(obj)
+        return serializers.DateTimeField().to_representation(until) if until else None
+
+    def get_seats_used(self, obj):
+        from .services import seats_used
+
+        return seats_used(obj.organization)
+
 
 class InvoiceSerializer(serializers.ModelSerializer):
+    plan_name = serializers.CharField(source="plan.name", read_only=True, default=None)
+
     class Meta:
         model = Invoice
         fields = [
-            "id", "provider", "amount", "currency", "status",
-            "period_start", "period_end", "paid_at", "proof_file", "created_at",
+            "id", "number", "provider", "plan_name", "months",
+            "amount", "amount_ht", "vat_rate", "vat_amount", "currency", "status",
+            "period_start", "period_end", "paid_at", "created_at",
         ]
         read_only_fields = fields
+
+
+class BillingProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BillingProfile
+        fields = ["legal_name", "address", "niu", "rccm", "email", "phone", "updated_at"]
+        read_only_fields = ["updated_at"]
 
 
 class CheckoutStripeSerializer(serializers.Serializer):
@@ -67,3 +114,11 @@ class CheckoutBankTransferSerializer(serializers.Serializer):
 
 class InvoiceProofUploadSerializer(serializers.Serializer):
     proof = serializers.FileField()
+
+
+class InvoiceReviewSerializer(serializers.Serializer):
+    """`approve` lu comme un vrai booléen : « false » / 0 refusent (avant, toute valeur non
+    vide — y compris la chaîne "false" — valait approbation)."""
+
+    approve = serializers.BooleanField()
+    reason = serializers.CharField(max_length=500, required=False, allow_blank=True)

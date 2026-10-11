@@ -1,24 +1,30 @@
 from django.urls import path
 
 from .views import (
+    BillingProfileView,
     CamPayWebhookView,
     CheckoutBankTransferView,
     CheckoutMobileMoneyView,
     CheckoutStripeView,
     InvoiceListView,
+    InvoicePdfView,
     InvoiceProofUploadView,
     InvoiceReviewView,
     PlanListView,
     StripeWebhookView,
     SubscriptionCancelView,
     SubscriptionMeView,
+    SubscriptionResumeView,
 )
 
 urlpatterns = [
     path("plans/", PlanListView.as_view(), name="billing-plans"),
     path("subscription/", SubscriptionMeView.as_view(), name="billing-subscription"),
     path("subscription/cancel/", SubscriptionCancelView.as_view(), name="billing-subscription-cancel"),
+    path("subscription/resume/", SubscriptionResumeView.as_view(), name="billing-subscription-resume"),
+    path("profile/", BillingProfileView.as_view(), name="billing-profile"),
     path("invoices/", InvoiceListView.as_view(), name="billing-invoices"),
+    path("invoices/<uuid:invoice_id>/pdf/", InvoicePdfView.as_view(), name="billing-invoice-pdf"),
     path("invoices/<uuid:invoice_id>/proof/", InvoiceProofUploadView.as_view(), name="billing-invoice-proof"),
     path("invoices/<uuid:invoice_id>/review/", InvoiceReviewView.as_view(), name="billing-invoice-review"),
     path("checkout/stripe/", CheckoutStripeView.as_view(), name="billing-checkout-stripe"),

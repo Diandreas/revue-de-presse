@@ -1,35 +1,21 @@
 from django.core.management.base import BaseCommand
 from django_celery_beat.models import CrontabSchedule, PeriodicTask
 
-TASKS = [
-    {
-        "name": "Relances mensuelles Mobile Money",
-        "task": "apps.billing.tasks.request_monthly_mobile_money_renewals",
-        "cron": {"minute": "0", "hour": "7"},
-    },
-    {
-        "name": "Vérification des abonnements en retard",
-        "task": "apps.billing.tasks.check_overdue_subscriptions",
-        "cron": {"minute": "30", "hour": "7"},
-    },
-    {
-        "name": "Rappels de renouvellement",
-        "task": "apps.billing.tasks.send_renewal_reminders",
-        "cron": {"minute": "0", "hour": "8"},
-    },
-]
+from apps.billing.periodic import ensure_periodic_tasks
+from apps.billing.services import billing_is_manual
 
 
 class Command(BaseCommand):
-    help = "Crée les tâches périodiques de facturation par défaut (planning modifiable ensuite via /admin/)."
+    help = (
+        "Crée / réaligne les tâches périodiques de facturation (déjà faites par la migration "
+        "billing 0005 ; planning modifiable ensuite via /admin/). En mode manuel, la relance "
+        "Mobile Money est désactivée."
+    )
 
     def handle(self, *args, **options):
-        for entry in TASKS:
-            schedule, _ = CrontabSchedule.objects.get_or_create(
-                **entry["cron"], defaults={"timezone": "Africa/Douala"}
-            )
-            _task, created = PeriodicTask.objects.update_or_create(
-                name=entry["name"], defaults={"task": entry["task"], "crontab": schedule, "enabled": True}
-            )
+        for name, created, enabled in ensure_periodic_tasks(
+            CrontabSchedule, PeriodicTask, manual_mode=billing_is_manual()
+        ):
             verb = "Créée" if created else "Mise à jour"
-            self.stdout.write(self.style.SUCCESS(f"{verb} : {entry['name']}"))
+            state = "active" if enabled else "désactivée"
+            self.stdout.write(self.style.SUCCESS(f"{verb} : {name} ({state})"))

@@ -1,0 +1,45 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; <a href="{% url opts|admin_urlname:'change' subscription.pk|admin_urlquote %}">{{ subscription.organization }}</a>
+  &rsaquo; Enregistrer un paiement
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <p>
+    Formule actuelle : <strong>{{ subscription.plan.name }}</strong> ·
+    statut : <strong>{{ subscription.get_status_display }}</strong> ·
+    fin de période : <strong>{{ subscription.current_period_end|date:"d/m/Y H:i"|default:"—" }}</strong>.
+  </p>
+  <p>
+    Une prolongation part du <strong>{{ base_from|date:"d/m/Y" }}</strong>
+    (fin de la période en cours si elle n'est pas passée, sinon aujourd'hui). La facture payée
+    reçoit le prochain numéro de la série et devient téléchargeable par le client.
+  </p>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <fieldset class="module aligned">
+      {% for field in form %}
+        <div class="form-row{% if field.errors %} errors{% endif %}">
+          {{ field.errors }}
+          <div class="flex-container">
+            {{ field.label_tag }} {{ field }}
+          </div>
+          {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+        </div>
+      {% endfor %}
+    </fieldset>
+    <div class="submit-row">
+      <input type="submit" class="default" value="Enregistrer le paiement">
+      <a href="{% url opts|admin_urlname:'change' subscription.pk|admin_urlquote %}" class="closelink">Annuler</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

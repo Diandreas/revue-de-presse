@@ -1,13 +1,12 @@
 import logging
 import uuid
-from datetime import timedelta
 
 import requests
 from django.conf import settings
-from django.utils import timezone
 
+from ..invoicing import amounts_from_ht
 from ..models import Invoice, Subscription
-from ..services import SubscriptionService
+from ..services import InvoiceService
 from .base import SubscriptionProvider
 
 logger = logging.getLogger(__name__)
@@ -45,12 +44,14 @@ class CamPayProvider(SubscriptionProvider):
             raise ValueError("Un numéro de téléphone Mobile Money est requis.")
 
         reference = f"sub-{subscription.id}-{uuid.uuid4().hex[:8]}"
+        # Prix catalogue HT -> montant TTC réellement demandé au client.
+        amount_ttc = amounts_from_ht(plan.price_amount, currency="XAF")["amount"]
         token = self._get_token()
         response = requests.post(
             f"{self.base_url}/collect/",
             headers={"Authorization": f"Token {token}"},
             json={
-                "amount": str(int(plan.price_amount)),
+                "amount": str(int(amount_ttc)),
                 "currency": "XAF",
                 "from": phone_number,
                 "description": f"Abonnement {plan.name} — Revue de Presse",
@@ -61,16 +62,11 @@ class CamPayProvider(SubscriptionProvider):
         response.raise_for_status()
         data = response.json()
 
-        Invoice.objects.create(
-            organization=organization,
+        InvoiceService.create_for_plan(
             subscription=subscription,
+            plan=plan,
             provider=Subscription.Provider.MOBILE_MONEY,
             provider_reference=reference,
-            amount=plan.price_amount,
-            currency="XAF",
-            status=Invoice.Status.PENDING,
-            period_start=timezone.now(),
-            period_end=timezone.now() + timedelta(days=30),
             raw_payload=data,
         )
         return {
@@ -106,12 +102,8 @@ class CamPayProvider(SubscriptionProvider):
             return None
 
         invoice.raw_payload = payload
+        invoice.save(update_fields=["raw_payload", "updated_at"])
         if payload.get("status") == "SUCCESSFUL":
-            invoice.status = Invoice.Status.PAID
-            invoice.paid_at = timezone.now()
-            invoice.save(update_fields=["status", "paid_at", "raw_payload", "updated_at"])
-            SubscriptionService.renew(subscription=invoice.subscription, provider=invoice.provider)
-        else:
-            invoice.status = Invoice.Status.FAILED
-            invoice.save(update_fields=["status", "raw_payload", "updated_at"])
-        return invoice
+            # Montant encaissé par l'opérateur : pas de contrôle face au prix catalogue actuel.
+            return InvoiceService.settle(invoice=invoice, check_amount=False)
+        return InvoiceService.reject(invoice=invoice, reason=f"Paiement Mobile Money refusé ({payload.get('status')}).")

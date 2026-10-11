@@ -1,8 +1,5 @@
-from datetime import timedelta
-
-from django.utils import timezone
-
 from ..models import Invoice, Subscription
+from ..services import InvoiceService
 from .base import SubscriptionProvider
 
 
@@ -11,25 +8,31 @@ class BankTransferProvider(SubscriptionProvider):
     justificatif de virement (InvoiceProofUploadView), un membre de l'équipe
     plateforme valide manuellement (InvoiceReviewView / action admin). Reflète
     l'usage B2B dominant au Cameroun pour les paiements récurrents inter-entreprises,
-    plutôt qu'un prélèvement Mobile Money peu adapté à ce contexte."""
+    plutôt qu'un prélèvement Mobile Money peu adapté à ce contexte.
+
+    Réservé au mode « online » : en mode manuel, la vue de checkout refuse avant d'arriver ici."""
 
     def create_checkout(self, *, organization, plan, subscription):
-        invoice = Invoice.objects.create(
-            organization=organization,
+        # Chaque clic créait une nouvelle facture en attente : on réutilise celle qui attend
+        # déjà le virement pour la même formule.
+        invoice = Invoice.objects.filter(
             subscription=subscription,
+            plan=plan,
             provider=Subscription.Provider.BANK_TRANSFER,
-            amount=plan.price_amount,
-            currency=plan.currency,
             status=Invoice.Status.PENDING,
-            period_start=timezone.now(),
-            period_end=timezone.now() + timedelta(days=30),
+        ).first() or InvoiceService.create_for_plan(
+            subscription=subscription, plan=plan, provider=Subscription.Provider.BANK_TRANSFER
         )
         return {
             "provider": "bank_transfer",
             "invoice_id": str(invoice.id),
-            "amount": str(plan.price_amount),
-            "currency": plan.currency,
-            "detail": "Effectuez le virement puis téléversez le justificatif sur cette facture pour validation.",
+            "invoice_number": invoice.number,
+            "amount": str(invoice.amount),
+            "currency": invoice.currency,
+            "detail": (
+                f"Effectuez le virement en indiquant la référence {invoice.number}, puis téléversez "
+                "le justificatif sur cette facture pour validation."
+            ),
         }
 
     def cancel(self, *, subscription):

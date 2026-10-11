@@ -1,4 +1,7 @@
-"""Choisir une formule ne doit rien accorder tant que le paiement n'est pas confirmé."""
+"""Choisir une formule ne doit rien accorder tant que le paiement n'est pas confirmé.
+
+Ces parcours de paiement en libre-service n'existent qu'en mode « online » (le mode manuel,
+par défaut, les ferme : voir test_billing_manual.py)."""
 from datetime import timedelta
 
 import pytest
@@ -11,6 +14,11 @@ from apps.billing.models import Invoice, Subscription
 from apps.billing.providers import StripeProvider
 from apps.billing.services import SubscriptionService
 from tests.factories import PlanFactory, SubscriptionFactory, UserFactory
+
+
+@pytest.fixture(autouse=True)
+def online_billing(settings):
+    settings.BILLING_MODE = "online"
 
 
 @pytest.fixture
@@ -61,7 +69,9 @@ def test_validated_bank_transfer_applies_the_requested_plan(authenticated_client
     response = authenticated_client.post("/api/billing/checkout/bank-transfer/", {"plan_code": "pro"})
     assert response.status_code == 200, response.data
     invoice = Invoice.objects.get(pk=response.data["invoice_id"])
-    assert invoice.amount == pro.price_amount
+    assert invoice.plan == pro  # la facture mémorise la formule payée
+    assert invoice.amount_ht == pro.price_amount  # prix catalogue HT, TVA en sus
+    assert invoice.amount == pro.price_amount + invoice.vat_amount
     subscription.refresh_from_db()
     assert subscription.plan == starter  # l'essai continue sur sa formule en attendant le virement
 

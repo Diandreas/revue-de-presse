@@ -105,6 +105,7 @@ class StripeProvider(SubscriptionProvider):
             defaults={
                 "organization": subscription.organization,
                 "subscription": subscription,
+                "plan": subscription.plan,
                 "amount": _stripe_amount_to_decimal(data.get("amount_paid"), currency),
                 "currency": currency.upper(),
                 "status": Invoice.Status.PAID,

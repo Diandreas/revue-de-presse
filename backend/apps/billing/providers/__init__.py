@@ -1,12 +1,14 @@
 from .bank_transfer_provider import BankTransferProvider
 from .base import SubscriptionProvider
 from .campay_provider import CamPayProvider
+from .manual_provider import ManualProvider
 from .stripe_provider import StripeProvider
 
 _PROVIDERS = {
     "stripe": StripeProvider,
     "mobile_money": CamPayProvider,
     "bank_transfer": BankTransferProvider,
+    "manual": ManualProvider,
 }
 
 
@@ -17,4 +19,7 @@ def get_provider(name):
     return provider_cls()
 
 
-__all__ = ["SubscriptionProvider", "StripeProvider", "CamPayProvider", "BankTransferProvider", "get_provider"]
+__all__ = [
+    "SubscriptionProvider", "StripeProvider", "CamPayProvider", "BankTransferProvider", "ManualProvider",
+    "get_provider",
+]

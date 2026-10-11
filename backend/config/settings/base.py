@@ -235,9 +235,24 @@ CAMPAY_BASE_URL = env("CAMPAY_BASE_URL", default="https://demo.campay.net/api")
 # nouveau compte ne peut lancer aucune revue avant qu'un paiement ait été validé.
 TRIAL_DAYS = env.int("TRIAL_DAYS", default=7)
 TRIAL_PLAN_CODE = env("TRIAL_PLAN_CODE", default="starter")
-SUBSCRIPTION_MOBILE_MONEY_GRACE_DAYS = 5
-SUBSCRIPTION_BANK_TRANSFER_GRACE_DAYS = 7
 SUBSCRIPTION_RENEWAL_REMINDER_DAYS_BEFORE = (3, 1)
+# Mode de facturation : « manual » (défaut) = aucun paiement en ligne, le client contacte
+# l'équipe (WhatsApp) et un membre du staff active / prolonge l'abonnement dans l'admin
+# Django ; « online » = parcours Stripe / Mobile Money / virement en libre-service.
+BILLING_MODE = env("BILLING_MODE", default="manual")
+# Jours d'accès conservés après la fin de la période payée (le temps de renouveler).
+BILLING_GRACE_DAYS = env.int("BILLING_GRACE_DAYS", default=3)
+# Contact affiché dans les messages de refus (mode manuel) et sur les factures.
+BILLING_CONTACT_WHATSAPP = env("BILLING_CONTACT_WHATSAPP", default="+237 693 42 79 13")
+# Factures : numérotation, TVA (19,25 % au Cameroun ; 0 = TVA non applicable) et identité
+# légale du vendeur (à faire valider par un comptable avant la première facture).
+BILLING_INVOICE_PREFIX = env("BILLING_INVOICE_PREFIX", default="RDP")
+BILLING_VAT_RATE = env("BILLING_VAT_RATE", default="19.25")
+BILLING_SELLER_NAME = env("BILLING_SELLER_NAME", default="Revue de Presse")
+BILLING_SELLER_ADDRESS = env("BILLING_SELLER_ADDRESS", default="")
+BILLING_SELLER_RCCM = env("BILLING_SELLER_RCCM", default="")
+BILLING_SELLER_NIU = env("BILLING_SELLER_NIU", default="")
+BILLING_SELLER_EMAIL = env("BILLING_SELLER_EMAIL", default="")
 
 LOGGING = {
     "version": 1,

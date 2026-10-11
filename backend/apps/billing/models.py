@@ -23,7 +23,12 @@ class Plan(TimeStampedModel):
 
     code = models.SlugField(max_length=50, unique=True)
     name = models.CharField(max_length=100)
-    price_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    price_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Prix catalogue HT par mois. Jamais affiché aux clients (formules « sur devis ») : "
+        "sert de base aux factures et de montant proposé lors d'un paiement manuel.",
+    )
     currency = models.CharField(max_length=3, default="XAF")
     billing_interval = models.CharField(
         max_length=20, choices=BillingInterval.choices, default=BillingInterval.MONTHLY
@@ -45,6 +50,7 @@ class Subscription(TimeStampedModel):
         STRIPE = "stripe", "Stripe (carte)"
         MOBILE_MONEY = "mobile_money", "Mobile Money"
         BANK_TRANSFER = "bank_transfer", "Virement bancaire"
+        MANUAL = "manual", "Paiement manuel (équipe)"
 
     class Status(models.TextChoices):
         TRIALING = "trialing", "Essai"
@@ -64,8 +70,42 @@ class Subscription(TimeStampedModel):
     cancel_at_period_end = models.BooleanField(default=False)
     metadata = models.JSONField(default=dict, blank=True)
 
+    class Meta:
+        verbose_name = "abonnement"
+        verbose_name_plural = "abonnements"
+
     def __str__(self):
         return f"{self.organization} · {self.plan} ({self.status})"
+
+
+class BillingProfile(TimeStampedModel):
+    """Identité légale de l'entreprise cliente, reportée sur ses factures (raison sociale,
+    NIU, RCCM). Renseignée par le client (page Abonnement) ou par l'équipe (admin)."""
+
+    organization = models.OneToOneField(Organization, on_delete=models.CASCADE, related_name="billing_profile")
+    legal_name = models.CharField("raison sociale", max_length=255, blank=True)
+    address = models.TextField("adresse", blank=True)
+    niu = models.CharField("NIU", max_length=50, blank=True, help_text="Numéro d'identifiant unique (fiscal).")
+    rccm = models.CharField("RCCM", max_length=60, blank=True)
+    email = models.EmailField("e-mail de facturation", blank=True)
+    phone = models.CharField("téléphone", max_length=30, blank=True)
+
+    class Meta:
+        verbose_name = "informations de facturation"
+        verbose_name_plural = "informations de facturation"
+
+    def __str__(self):
+        return self.legal_name or str(self.organization)
+
+
+class InvoiceCounter(models.Model):
+    """Dernier numéro de facture attribué pour une année (numérotation sans trou)."""
+
+    year = models.PositiveIntegerField(unique=True)
+    last_number = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.year} : {self.last_number}"
 
 
 class Invoice(TimeStampedModel):
@@ -76,11 +116,24 @@ class Invoice(TimeStampedModel):
         FAILED = "failed", "Échouée"
         REFUNDED = "refunded", "Remboursée"
 
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="invoices")
-    subscription = models.ForeignKey(Subscription, on_delete=models.CASCADE, related_name="invoices")
+    # Une facture est une pièce comptable : elle survit à la suppression de l'organisation
+    # (le nom de l'acheteur est figé dans `buyer_name` / `buyer`).
+    organization = models.ForeignKey(
+        Organization, on_delete=models.SET_NULL, null=True, blank=True, related_name="invoices"
+    )
+    subscription = models.ForeignKey(
+        Subscription, on_delete=models.SET_NULL, null=True, blank=True, related_name="invoices"
+    )
+    # Formule payée par cette facture, appliquée à l'abonnement quand elle est réglée.
+    plan = models.ForeignKey(Plan, on_delete=models.PROTECT, null=True, blank=True, related_name="invoices")
+    number = models.CharField("numéro", max_length=32, unique=True, null=True, blank=True, editable=False)
+    months = models.PositiveSmallIntegerField("mois couverts", default=1)
     provider = models.CharField(max_length=20, choices=Subscription.Provider.choices)
-    provider_reference = models.CharField(max_length=255, blank=True)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    provider_reference = models.CharField("référence du paiement", max_length=255, blank=True)
+    amount = models.DecimalField("montant TTC", max_digits=12, decimal_places=2)
+    amount_ht = models.DecimalField("montant HT", max_digits=12, decimal_places=2, null=True, blank=True)
+    vat_rate = models.DecimalField("taux de TVA (%)", max_digits=5, decimal_places=2, null=True, blank=True)
+    vat_amount = models.DecimalField("montant de TVA", max_digits=12, decimal_places=2, null=True, blank=True)
     currency = models.CharField(max_length=3, default="XAF")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     period_start = models.DateTimeField()
@@ -92,10 +145,25 @@ class Invoice(TimeStampedModel):
     reviewed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
     )
+    buyer_name = models.CharField("client", max_length=255, blank=True)
+    seller = models.JSONField("vendeur (figé)", default=dict, blank=True)
+    buyer = models.JSONField("client (figé)", default=dict, blank=True)
+    notes = models.TextField("notes internes", blank=True)
     raw_payload = models.JSONField(default=dict, blank=True)
 
     class Meta:
         ordering = ["-created_at"]
+        verbose_name = "facture"
+        verbose_name_plural = "factures"
+
+    def save(self, *args, **kwargs):
+        # Numéro, identités et ventilation HT/TVA sont fixés à la création (jamais sur une
+        # sauvegarde partielle : un numéro tiré sans être enregistré créerait un trou).
+        if kwargs.get("update_fields") is None:
+            from .invoicing import prepare_invoice
+
+            prepare_invoice(self)
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Facture {self.id} · {self.organization} ({self.status})"
+        return f"Facture {self.number or self.id} · {self.buyer_name or self.organization} ({self.status})"
