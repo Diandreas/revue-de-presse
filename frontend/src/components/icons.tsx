@@ -406,3 +406,11 @@ export const SearchIcon = (p: IconProps) => (
     <path d="M20.5 20.5 16 16" />
   </Icon>
 )
+
+/** Bulle de discussion avec combiné : le geste « écrire sur WhatsApp », dans le style du jeu. */
+export const WhatsAppIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M7.9 20A9 9 0 1 0 4 16.1L2.5 21.5Z" />
+    <path d="M9.4 8.6c.3-.3.8-.3 1.1 0l.9.9c.3.3.3.8 0 1.1l-.5.5c.4.9 1.1 1.6 2 2l.5-.5c.3-.3.8-.3 1.1 0l.9.9c.3.3.3.8 0 1.1l-.5.5c-.6.6-1.5.8-2.3.4a8.4 8.4 0 0 1-4-4c-.4-.8-.2-1.7.4-2.3Z" />
+  </Icon>
+)

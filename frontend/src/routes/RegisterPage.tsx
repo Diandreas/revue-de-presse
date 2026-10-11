@@ -43,6 +43,7 @@ export default function RegisterPage() {
 
   return (
     <AuthShell
+      demo
       title="Créez l’espace de votre entreprise"
       subtitle="Vous en devenez le propriétaire et pourrez inviter votre équipe ensuite."
       badge={

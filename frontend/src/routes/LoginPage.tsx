@@ -43,6 +43,7 @@ export default function LoginPage() {
 
   return (
     <AuthShell
+      demo
       title="Bon retour parmi nous"
       subtitle="Connectez-vous à l’espace de votre entreprise."
       footer={

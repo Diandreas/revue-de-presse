@@ -16,6 +16,7 @@ import {
 } from './icons'
 import { Logo, LogoMark } from './Logo'
 import { SidebarUsageCard } from './UsageCard'
+import { WhatsAppButton } from './WhatsAppButton'
 import { Avatar, FullPageLoader } from './ui'
 
 const NAV_SECTIONS: { title: string; items: { to: string; label: string; icon: IconComponent }[] }[] = [
@@ -107,6 +108,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       <div className="space-y-3 p-4">
+        <WhatsAppButton topic="help" organizationName={organization?.name} variant="dark" label="Aide sur WhatsApp" />
         <SidebarUsageCard onNavigate={onNavigate} />
         <div className="flex items-center gap-3 rounded-2xl px-2 py-2">
           <Avatar name={user?.full_name || user?.email || '?'} size="sm" />

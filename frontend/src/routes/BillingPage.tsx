@@ -7,6 +7,7 @@ import { isAdminRole, useAuth } from '../auth/useAuth'
 import { Modal } from '../components/Modal'
 import { InvoiceStatusBadge, SubscriptionStatusBadge } from '../components/StatusBadge'
 import { useToast } from '../components/Toast'
+import { WhatsAppButton } from '../components/WhatsAppButton'
 import {
   CheckIcon,
   ClockIcon,
@@ -585,6 +586,7 @@ export default function BillingPage() {
         eyebrow="Compte"
         title="Abonnement"
         subtitle="Votre formule, votre consommation et vos factures. Paiement par Mobile Money, carte ou virement."
+        actions={<WhatsAppButton topic="billing" organizationName={organization?.name} label="Une question ? WhatsApp" />}
       />
 
       {outcome === 'success' && (

@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { CheckIcon, HighlighterIcon, ScaleIcon, ShieldIcon, SparkleIcon } from './icons'
 import { Logo, LogoMark } from './Logo'
+import { WhatsAppButton } from './WhatsAppButton'
+import { WHATSAPP_DISPLAY } from '../lib/contact'
 
 interface AuthShellProps {
   title: string
@@ -8,6 +10,8 @@ interface AuthShellProps {
   children: ReactNode
   footer?: ReactNode
   badge?: ReactNode
+  /** Propose une démo guidée sur WhatsApp sous le formulaire (connexion, inscription). */
+  demo?: boolean
 }
 
 /** Illustration : une coupure de presse dont l'IA a surligné les passages sensibles. */
@@ -65,7 +69,7 @@ const SELLING_POINTS = [
 
 /** Écran plein-page partagé par connexion / inscription / invitation : panneau de marque à
  * gauche (masqué sur petit écran), formulaire à droite. */
-export function AuthShell({ title, subtitle, children, footer, badge }: AuthShellProps) {
+export function AuthShell({ title, subtitle, children, footer, badge, demo = false }: AuthShellProps) {
   return (
     <div className="flex min-h-screen bg-white">
       <aside className="ink-gradient relative hidden w-[46%] max-w-[680px] flex-col justify-between overflow-hidden p-10 text-white lg:flex xl:p-14">
@@ -118,6 +122,13 @@ export function AuthShell({ title, subtitle, children, footer, badge }: AuthShel
             <p className="mt-2 text-[15px] leading-relaxed text-slate-500">{subtitle}</p>
             <div className="mt-8">{children}</div>
             {footer && <p className="mt-8 text-center text-sm text-slate-500">{footer}</p>}
+            {demo && (
+              <div className="mt-8 border-t border-slate-100 pt-6 text-center">
+                <p className="text-sm text-slate-500">Vous préférez une présentation guidée ?</p>
+                <WhatsAppButton topic="demo" className="mt-3 w-full" />
+                <p className="mt-2 text-xs text-slate-400">WhatsApp : {WHATSAPP_DISPLAY}</p>
+              </div>
+            )}
           </div>
         </div>
         <p className="flex items-center justify-center gap-1.5 pb-6 text-xs text-slate-400">

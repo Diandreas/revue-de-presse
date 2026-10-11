@@ -1,11 +1,13 @@
 import clsx from 'clsx'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../auth/useAuth'
 import { usageStateOf } from '../features/billing/usage'
 import { useSubscription } from '../features/billing/useBilling'
 import { plural } from '../lib/format'
 import { AlertTriangleIcon, GiftIcon, ZapIcon } from './icons'
 import { ProgressBar } from './ui'
+import { WhatsAppButton } from './WhatsAppButton'
 
 /** Encart « formule & consommation » de la barre latérale (fond sombre). */
 export function SidebarUsageCard({ onNavigate }: { onNavigate?: () => void }) {
@@ -93,6 +95,7 @@ export function UsageBanner() {
 }
 
 function BannerShell({ tone, children }: { tone: 'amber' | 'red'; children: ReactNode }) {
+  const { organization } = useAuth()
   return (
     <div
       className={clsx(
@@ -104,9 +107,12 @@ function BannerShell({ tone, children }: { tone: 'amber' | 'red'; children: Reac
         <AlertTriangleIcon className={clsx('mt-0.5 h-4 w-4 shrink-0', tone === 'amber' ? 'text-amber-500' : 'text-red-500')} />
         <span>{children}</span>
       </p>
-      <Link to="/billing" className="btn-secondary btn-sm shrink-0">
-        Voir les formules
-      </Link>
+      <div className="flex shrink-0 flex-wrap items-center gap-3">
+        <WhatsAppButton topic="billing" organizationName={organization?.name} variant="link" label="Nous écrire" />
+        <Link to="/billing" className="btn-secondary btn-sm">
+          Voir les formules
+        </Link>
+      </div>
     </div>
   )
 }
