@@ -5,12 +5,14 @@ import {
   LegalDocument,
   LegalEmail,
   LegalFacts,
-  LegalValue,
   type LegalSection,
 } from '../components/LegalDocument'
-import { LEGAL } from '../lib/legal'
+import { LEGAL, hasLegalEmail, isPlaceholder } from '../lib/legal'
 
 const { publisher, host } = LEGAL
+
+/** Valeur facultative : null (ligne masquée) tant qu'elle n'est pas renseignée. */
+const optional = (value: string) => (isPlaceholder(value) ? null : value)
 
 const SECTIONS: LegalSection[] = [
   {
@@ -30,12 +32,12 @@ const SECTIONS: LegalSection[] = [
                 excelcisgroup.com
               </ExternalLink>,
             ],
-            ['Forme juridique', <LegalValue key="form" value={publisher.legalForm} />],
-            ['Capital social', <LegalValue key="capital" value={publisher.capital} />],
-            ['Siège social', <LegalValue key="address" value={publisher.address} />],
-            ['RCCM', <LegalValue key="rccm" value={publisher.rccm} />],
-            ['NIU', <LegalValue key="niu" value={publisher.niu} />],
-            ['E-mail', <LegalEmail key="email" />],
+            ['Forme juridique', optional(publisher.legalForm)],
+            ['Capital social', optional(publisher.capital)],
+            ['Siège social', publisher.address],
+            ['RCCM', optional(publisher.rccm)],
+            ['NIU', optional(publisher.niu)],
+            ['E-mail', hasLegalEmail ? <LegalEmail key="email" /> : null],
             [
               'Téléphone / WhatsApp',
               <ExternalLink key="phone" href={publisher.whatsappUrl}>
@@ -47,15 +49,15 @@ const SECTIONS: LegalSection[] = [
       </>
     ),
   },
-  {
-    id: 'publication',
-    title: 'Direction de la publication',
-    body: (
-      <p>
-        Directeur ou directrice de la publication : <LegalValue value={publisher.publicationDirector} />.
-      </p>
-    ),
-  },
+  ...(isPlaceholder(publisher.publicationDirector)
+    ? []
+    : [
+        {
+          id: 'publication',
+          title: 'Direction de la publication',
+          body: <p>Directeur ou directrice de la publication : {publisher.publicationDirector}.</p>,
+        },
+      ]),
   {
     id: 'hebergement',
     title: 'Hébergement',
@@ -65,7 +67,7 @@ const SECTIONS: LegalSection[] = [
           ['Hébergeur', host.name],
           ['Adresse', host.address],
           ['Site', <ExternalLink key="site" href={host.website}>{host.website.replace('https://', '')}</ExternalLink>],
-          ['Localisation du serveur', <LegalValue key="location" value={host.dataLocation} />],
+          ['Localisation du serveur', host.dataLocation],
         ]}
       />
     ),

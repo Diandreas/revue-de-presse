@@ -2,14 +2,12 @@
  * mentions légales) : UNE seule source pour les trois pages, le pied de page et
  * l'inscription.
  *
- * Les valeurs encore inconnues valent `TO_COMPLETE` : elles s'affichent surlignées sur les
- * pages publiques tant qu'elles ne sont pas remplacées. Les textes doivent être relus par
- * un juriste avant d'encaisser des clients (audit P0 « CGU/CGV »). */
+ * Une information facultative laissée vide ('') n'est pas affichée : la ligne ou la phrase
+ * correspondante disparaît des pages publiques. Les textes doivent être relus par un juriste
+ * avant d'encaisser des clients (audit P0 « CGU/CGV »). */
 import { WHATSAPP_DISPLAY, WHATSAPP_NUMBER } from './contact'
 
-/** Marqueur des informations à fournir par l'éditeur (RCCM, NIU, adresse…). */
-export const TO_COMPLETE = '[à compléter]'
-
+/** Vrai si une information facultative n'est pas renseignée (elle n'est alors pas affichée). */
 export function isPlaceholder(value: string | null | undefined): boolean {
   return !value || value.includes('[à compléter')
 }
@@ -41,30 +39,30 @@ export const LEGAL = {
     /** Site de l'éditeur. */
     website: 'https://excelcisgroup.com',
     /** Forme juridique (SARL, SAS, établissement…). */
-    legalForm: TO_COMPLETE,
+    legalForm: '' as string,
     /** Capital social, si société. */
-    capital: TO_COMPLETE,
+    capital: '' as string,
     /** Registre du commerce et du crédit mobilier. */
-    rccm: TO_COMPLETE,
+    rccm: '' as string,
     /** Numéro d'identifiant unique (administration fiscale). */
-    niu: TO_COMPLETE,
+    niu: '' as string,
     /** Adresse du siège social. */
-    address: TO_COMPLETE,
+    address: 'Nkolanga, Cameroun',
     /** E-mail de contact (commercial, support, données personnelles). */
-    email: TO_COMPLETE,
+    email: '' as string,
     /** Téléphone / WhatsApp (lib/contact.ts). */
     phone: WHATSAPP_DISPLAY,
     whatsappUrl: `https://wa.me/${WHATSAPP_NUMBER}`,
-    /** Directeur (ou directrice) de la publication. */
-    publicationDirector: TO_COMPLETE,
+    /** Directeur (ou directrice) de la publication : facultatif, section masquée si vide. */
+    publicationDirector: '' as string,
   },
   host: {
-    // À vérifier sur le contrat d'hébergement du VPS (raison sociale et adresse de l'hébergeur).
+    // Serveur VPS Hostinger situé à Manchester (Royaume-Uni), d'après son adresse IP.
     name: 'Hostinger International Ltd.',
     address: '61 Lordou Vironos Street, 6023 Larnaca, Chypre',
     website: 'https://www.hostinger.com',
     /** Pays du centre de données du serveur (VPS). */
-    dataLocation: TO_COMPLETE,
+    dataLocation: 'Royaume-Uni (centre de données Hostinger)',
   },
   aiProvider: {
     name: 'Mistral AI',
@@ -73,10 +71,10 @@ export const LEGAL = {
     dataLocation: 'Union européenne',
     /** Conservation et réutilisation des contenus par Mistral AI selon l'offre souscrite
      * (exclusion de l'entraînement des modèles, durée de conservation). */
-    dataTerms: TO_COMPLETE,
+    dataTerms: '' as string,
   },
   /** Juridiction compétente en cas de litige (ex. « tribunaux de Douala »). */
-  jurisdiction: TO_COMPLETE,
+  jurisdiction: '' as string,
   /** Durées de conservation (proposition à valider par l'éditeur, idéalement avec un juriste). */
   retention: [
     {
@@ -106,6 +104,9 @@ export const LEGAL = {
     },
   ],
 } as const
+
+/** Vrai si l'éditeur a renseigné une adresse e-mail publique. */
+export const hasLegalEmail = !isPlaceholder(LEGAL.publisher.email)
 
 /** « 11 octobre 2026 » à partir d'une date AAAA-MM-JJ (sans décalage de fuseau). */
 export function formatLegalDate(isoDate: string): string {

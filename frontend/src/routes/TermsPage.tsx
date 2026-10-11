@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
-import { LegalContact, LegalDocument, LegalEmail, LegalValue, type LegalSection } from '../components/LegalDocument'
-import { LEGAL, TERMS_VERSION } from '../lib/legal'
+import { LegalContact, LegalDocument, LegalEmail, type LegalSection } from '../components/LegalDocument'
+import { LEGAL, TERMS_VERSION, hasLegalEmail, isPlaceholder } from '../lib/legal'
 
 const { publisher } = LEGAL
 
@@ -88,7 +88,14 @@ const SECTIONS: LegalSection[] = [
       <ul>
         <li>
           Les prix sont établis sur devis, selon le volume de revues, le nombre d’Utilisateurs et l’accompagnement souhaité.
-          Le Client en fait la demande auprès de l’Éditeur par WhatsApp ({publisher.phone}) ou par e-mail (<LegalEmail />).
+          Le Client en fait la demande auprès de l’Éditeur par WhatsApp ({publisher.phone})
+          {hasLegalEmail && (
+            <>
+              {' '}
+              ou par e-mail (<LegalEmail />)
+            </>
+          )}
+          .
         </li>
         <li>
           Aucun paiement n’est effectué en ligne. Le devis accepté précise la formule, la durée de la période d’abonnement,
@@ -272,7 +279,8 @@ const SECTIONS: LegalSection[] = [
         <p>Les Conditions sont régies par le droit camerounais, y compris les Actes uniformes OHADA applicables.</p>
         <p>
           En cas de différend, les parties recherchent d’abord une solution amiable. À défaut d’accord dans un délai de 30
-          jours, le litige est porté devant les juridictions compétentes : <LegalValue value={LEGAL.jurisdiction} />.
+          jours, le litige est porté devant les juridictions camerounaises compétentes
+          {isPlaceholder(LEGAL.jurisdiction) ? '' : ` (${LEGAL.jurisdiction})`}.
         </p>
       </>
     ),

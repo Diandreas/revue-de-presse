@@ -5,10 +5,9 @@ import {
   LegalDocument,
   LegalEmail,
   LegalTable,
-  LegalValue,
   type LegalSection,
 } from '../components/LegalDocument'
-import { LEGAL } from '../lib/legal'
+import { LEGAL, hasLegalEmail, isPlaceholder } from '../lib/legal'
 
 const { publisher, host, aiProvider } = LEGAL
 
@@ -105,8 +104,13 @@ const SECTIONS: LegalSection[] = [
         </p>
         <p>
           {aiProvider.name} agit en qualité de sous-traitant, pour notre compte et selon ses conditions contractuelles de
-          traitement des données. Conservation et réutilisation des contenus chez {aiProvider.name} :{' '}
-          <LegalValue value={aiProvider.dataTerms} />.
+          traitement des données.
+          {!isPlaceholder(aiProvider.dataTerms) && (
+            <>
+              {' '}
+              Conservation et réutilisation des contenus chez {aiProvider.name} : {aiProvider.dataTerms}.
+            </>
+          )}
         </p>
         <p>
           Les résultats de l’IA peuvent être inexacts ou incomplets : voir les{' '}
@@ -129,8 +133,7 @@ const SECTIONS: LegalSection[] = [
           Nos sous-traitants techniques :
           <ul className="mt-2">
             <li>
-              hébergement du site et des données : {host.name} ({host.address}) — serveur situé :{' '}
-              <LegalValue value={host.dataLocation} /> ;
+              hébergement du site et des données : {host.name} ({host.address}) — serveur situé : {host.dataLocation} ;
             </li>
             <li>analyse des documents par l’IA : {aiProvider.name} (France, Union européenne) ;</li>
             <li>polices de caractères : Google Fonts (Google), qui reçoit l’adresse IP du navigateur au chargement des pages ;</li>
@@ -191,7 +194,13 @@ const SECTIONS: LegalSection[] = [
           retirer à tout moment un consentement donné.
         </p>
         <p>
-          Pour les exercer, écrivez-nous par e-mail (<LegalEmail />) ou sur WhatsApp (
+          Pour les exercer, écrivez-nous{' '}
+          {hasLegalEmail && (
+            <>
+              par e-mail (<LegalEmail />) ou{' '}
+            </>
+          )}
+          sur WhatsApp (
           <ExternalLink href={publisher.whatsappUrl}>{publisher.phone}</ExternalLink>) en précisant votre demande ; nous
           pouvons vous demander de justifier de votre identité. Nous répondons dans un délai d’un mois.
         </p>

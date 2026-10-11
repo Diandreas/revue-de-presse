@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { LEGAL, LEGAL_LAST_UPDATED, TERMS_VERSION, formatLegalDate, isPlaceholder } from '../lib/legal'
+import { LEGAL, LEGAL_LAST_UPDATED, TERMS_VERSION, formatLegalDate, hasLegalEmail } from '../lib/legal'
 import { useDocumentMeta } from '../lib/useDocumentMeta'
 import { useScrollToHash } from '../lib/useScrollToHash'
 import { ChevronDownIcon } from './icons'
@@ -21,14 +21,6 @@ interface LegalDocumentProps {
   showVersion?: boolean
 }
 
-/** Valeur issue de lib/legal.ts : surlignée tant qu'elle vaut « [à compléter] ». */
-export function LegalValue({ value }: { value: string }) {
-  if (isPlaceholder(value)) {
-    return <mark className="rounded bg-amber-100 px-1 font-medium text-amber-900">{value || '[à compléter]'}</mark>
-  }
-  return <>{value}</>
-}
-
 /** Lien sortant (site d'un prestataire, WhatsApp) ouvert dans un nouvel onglet. */
 export function ExternalLink({ href, children }: { href: string; children: ReactNode }) {
   return (
@@ -41,7 +33,7 @@ export function ExternalLink({ href, children }: { href: string; children: React
 /** Adresse e-mail de l'éditeur : lien « mailto » une fois renseignée. */
 export function LegalEmail() {
   const email = LEGAL.publisher.email
-  return isPlaceholder(email) ? <LegalValue value={email} /> : <a href={`mailto:${email}`}>{email}</a>
+  return hasLegalEmail ? <a href={`mailto:${email}`}>{email}</a> : null
 }
 
 /** Coordonnées de l'éditeur (fin des pages légales). */
@@ -49,14 +41,16 @@ export function LegalContact() {
   const { publisher } = LEGAL
   return (
     <ul>
-      <li>
-        E-mail : <LegalEmail />
-      </li>
+      {hasLegalEmail && (
+        <li>
+          E-mail : <LegalEmail />
+        </li>
+      )}
       <li>
         WhatsApp : <ExternalLink href={publisher.whatsappUrl}>{publisher.phone}</ExternalLink>
       </li>
       <li>
-        Courrier : {publisher.name}, <LegalValue value={publisher.address} />
+        Courrier : {publisher.name}, {publisher.address}
       </li>
     </ul>
   )
@@ -90,10 +84,11 @@ export function LegalTable({ head, rows }: { head: [string, string]; rows: [Reac
 }
 
 /** Liste « libellé : valeur » (identité de l'éditeur, de l'hébergeur). */
-export function LegalFacts({ items }: { items: [string, ReactNode][] }) {
+/** Les lignes sans valeur (null) sont omises : informations facultatives non renseignées. */
+export function LegalFacts({ items }: { items: [string, ReactNode | null][] }) {
   return (
     <dl className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200 text-sm">
-      {items.map(([label, value]) => (
+      {items.filter(([, value]) => value != null).map(([label, value]) => (
         <div key={label} className="grid gap-1 px-4 py-3 sm:grid-cols-[200px_minmax(0,1fr)] sm:gap-4">
           <dt className="text-slate-500">{label}</dt>
           <dd className="font-medium break-words text-slate-800">{value}</dd>
