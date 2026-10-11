@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Scripts shell exécutés sur le serveur Linux : toujours LF, même extraits sous Windows.
+*.sh text eol=lf

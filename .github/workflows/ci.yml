@@ -1,0 +1,109 @@
+# Intégration continue : tests backend (Postgres + Redis + WeasyPrint réels), lint Python,
+# build + lint du frontend, et vérification des scripts d'exploitation (shellcheck).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: revue
+          POSTGRES_PASSWORD: revue
+          POSTGRES_DB: revue_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U revue"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.test
+      DATABASE_URL: postgres://revue:revue@127.0.0.1:5432/revue_ci
+      REDIS_URL: redis://127.0.0.1:6379/0
+      # Le test d'export PDF est obligatoire ici (il est seulement ignoré sur un poste
+      # Windows sans Pango) : c'est lui qui aurait détecté la casse WeasyPrint/pydyf.
+      REQUIRE_WEASYPRINT: "1"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bibliothèques système (WeasyPrint, OCR, PDF)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libcairo2 libffi-dev \
+            shared-mime-info poppler-utils
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements/*.txt
+      - name: Dépendances Python
+        run: pip install -r requirements/dev.txt -r requirements/prod.txt
+      - name: Migrations à jour
+        run: python manage.py makemigrations --check --dry-run
+      - name: Tests
+        run: python -m pytest -q -p no:cacheprovider --create-db
+
+  backend-lint:
+    name: Backend (ruff)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "ruff==0.6.9"
+      - run: ruff check backend/
+
+  frontend:
+    name: Frontend (build + oxlint)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Build (tsc + vite)
+        run: npm run build
+      - name: Lint (oxlint)
+        run: npm run lint
+
+  ops-scripts:
+    name: Scripts d'exploitation (shellcheck)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck ops/backup/*.sh ops/deploy/*.sh

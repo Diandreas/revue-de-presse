@@ -1,5 +1,7 @@
 from django.core.exceptions import ImproperlyConfigured
 
+from config.sentry import init_sentry, read_revision
+
 from .base import *  # noqa: F401,F403
 
 DEBUG = False
@@ -36,3 +38,18 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # ops/nginx/presse-media.conf) et IP du client lue dans X-Forwarded-For (1 proxy).
 MEDIA_X_ACCEL_REDIRECT = env.bool("MEDIA_X_ACCEL_REDIRECT", default=True)  # noqa: F405
 REST_FRAMEWORK = {**REST_FRAMEWORK, "NUM_PROXIES": env.int("DJANGO_NUM_PROXIES", default=1)}  # noqa: F405
+
+# La valeur de repli de base.py est publique (dépôt) : en production elle permettrait de
+# forger des sessions et des jetons. On refuse de démarrer sans vraie clé.
+if not env("DJANGO_SECRET_KEY", default="") or SECRET_KEY == "dev-insecure-key-change-me":  # noqa: F405
+    raise ImproperlyConfigured("DJANGO_SECRET_KEY doit être défini (valeur longue et aléatoire) en production.")
+
+# --- Supervision : Sentry (facultatif, actif seulement si SENTRY_DSN est défini) ---
+# Initialisé ici (et non dans base.py) : jamais d'envoi depuis les tests ni le poste de dev.
+SENTRY_DSN = env("SENTRY_DSN", default="")  # noqa: F405
+init_sentry(
+    dsn=SENTRY_DSN,
+    environment=env("SENTRY_ENVIRONMENT", default="production"),  # noqa: F405
+    release=env("SENTRY_RELEASE", default="") or read_revision(BASE_DIR),  # noqa: F405
+    traces_sample_rate=env.float("SENTRY_TRACES_SAMPLE_RATE", default=0.0),  # noqa: F405
+)

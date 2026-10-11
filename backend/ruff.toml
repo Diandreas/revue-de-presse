@@ -1,0 +1,8 @@
+# Lint Python minimal (CI : ruff check backend/). Règles volontairement réduites aux vraies
+# erreurs (syntaxe, noms indéfinis, imports inutilisés, variables mortes) : à élargir peu à peu.
+target-version = "py312"
+line-length = 120
+extend-exclude = ["**/migrations/**", "test_mediafiles", "mediafiles", "staticfiles"]
+
+[lint]
+select = ["E4", "E7", "E9", "F", "W"]
