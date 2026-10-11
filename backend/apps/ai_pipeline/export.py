@@ -113,12 +113,13 @@ def _context(review):
 
 
 def _grouped_highlights(review):
-    """Points clés regroupés par catégorie, dans l'ordre d'affichage des catégories."""
+    """Points clés regroupés par catégorie, dans l'ordre d'affichage des catégories (sans
+    ceux que l'utilisateur a masqués comme faux positifs)."""
     from apps.press_review.models import Highlight
 
     groups = OrderedDict()
     highlights = (
-        Highlight.objects.filter(job=review.job)
+        Highlight.objects.filter(job=review.job, hidden=False)
         .select_related("category", "source_document")
         .order_by("category__sort_order", "category__name", "order")
     )

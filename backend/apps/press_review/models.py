@@ -116,6 +116,12 @@ class SourceDocument(TimeStampedModel):
         return self.original_filename
 
 
+class PressReviewJobQuerySet(models.QuerySet):
+    def visible(self):
+        """Revues que l'organisation voit encore (hors revues supprimées par l'utilisateur)."""
+        return self.filter(deleted_at__isnull=True)
+
+
 class PressReviewJob(TimeStampedModel):
     class Status(models.TextChoices):
         UPLOADED = "UPLOADED", "Téléversé"
@@ -137,6 +143,12 @@ class PressReviewJob(TimeStampedModel):
     error_message = models.TextField(blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    # Suppression demandée par le client : documents, revue, points clés et fichiers sont
+    # effacés, mais la ligne reste (sans contenu) pour que la revue continue de compter
+    # dans le quota de la période — sinon « supprimer puis relancer » le contournerait.
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    objects = PressReviewJobQuerySet.as_manager()
 
     class Meta:
         ordering = ["-created_at"]
@@ -188,6 +200,10 @@ class Highlight(TimeStampedModel):
     confidence = models.FloatField(null=True, blank=True)
     page_number = models.PositiveIntegerField(null=True, blank=True)
     order = models.PositiveIntegerField(default=0)
+    hidden = models.BooleanField(
+        default=False,
+        help_text="Masqué par l'utilisateur (faux positif) : absent de l'annexe des exports.",
+    )
 
     class Meta:
         ordering = ["order", "created_at"]
@@ -209,6 +225,17 @@ class GeneratedReview(TimeStampedModel):
         upload_to=generated_review_upload_path, null=True, blank=True, max_length=FILE_PATH_MAX_LENGTH
     )
     generated_at = models.DateTimeField(null=True, blank=True)
+    # Version rédigée par l'IA, mise de côté à la première correction manuelle (vide tant
+    # que la revue n'a pas été modifiée) : permet « Restaurer la version de l'IA ».
+    original_structured = models.JSONField(default=dict, blank=True)
+    edited_at = models.DateTimeField(null=True, blank=True)
+    edited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="edited_reviews"
+    )
+
+    @property
+    def is_edited(self):
+        return bool(self.original_structured)
 
     def __str__(self):
         return f"Revue pour job {self.job_id}"

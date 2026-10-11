@@ -93,6 +93,8 @@ interface PressReviewJobBase {
   progress_percent: number
   created_at: string
   completed_at: string | null
+  /** Auteur de la revue (id utilisateur) : il peut la supprimer, comme un owner / admin. */
+  created_by: string | null
 }
 
 export interface PressReviewJobListItem extends PressReviewJobBase {
@@ -125,6 +127,8 @@ export interface Highlight {
   page_number: number | null
   order: number
   source_document: string | null
+  /** Masqué par l'utilisateur (faux positif) : absent de l'annexe des exports. */
+  hidden: boolean
 }
 
 /** Notice d'un journal dans la revue de presse. */
@@ -150,6 +154,14 @@ export interface StructuredReview {
   sections: PressReviewSection[]
 }
 
+/** Rubrique de la charte (toutes, même vides : pour y déplacer une notice). */
+export interface PressReviewRubrique {
+  key: string
+  title: string
+  color: string
+  icon: string
+}
+
 export interface GeneratedReview {
   summary_markdown: string
   /** null pour les revues générées avant ce format (affichées en Markdown). */
@@ -157,6 +169,20 @@ export interface GeneratedReview {
   pdf_file: string | null
   docx_file: string | null
   generated_at: string | null
+  /** Corrigée à la main : la version de l'IA peut être restaurée. */
+  is_edited: boolean
+  edited_at: string | null
+  edited_by_name: string | null
+  rubriques: PressReviewRubrique[]
+}
+
+/** Correction de la revue (PATCH /jobs/{id}/review/). */
+export interface ReviewUpdateInput {
+  title?: string
+  date_label?: string
+  sections?: { key: string; entries: PressReviewEntry[] }[]
+  /** Dernière correction connue : 409 si un autre membre a corrigé entre-temps. */
+  expected_edited_at?: string | null
 }
 
 export interface Plan {

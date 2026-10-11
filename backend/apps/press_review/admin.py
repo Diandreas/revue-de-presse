@@ -29,10 +29,26 @@ class HighlightInline(admin.TabularInline):
     can_delete = False
 
 
+class DeletedFilter(admin.SimpleListFilter):
+    title = "suppression"
+    parameter_name = "supprimee"
+
+    def lookups(self, request, model_admin):
+        return [("non", "Visibles"), ("oui", "Supprimées par le client")]
+
+    def queryset(self, request, queryset):
+        if self.value() == "non":
+            return queryset.filter(deleted_at__isnull=True)
+        if self.value() == "oui":
+            return queryset.filter(deleted_at__isnull=False)
+        return queryset
+
+
 @admin.register(PressReviewJob)
 class PressReviewJobAdmin(admin.ModelAdmin):
-    list_display = ["title", "organization", "status", "progress_percent", "created_at"]
-    list_filter = ["status"]
+    # Une revue « supprimée » n'a plus de contenu : la ligne reste pour le décompte du quota.
+    list_display = ["title", "organization", "status", "progress_percent", "created_at", "deleted_at"]
+    list_filter = ["status", DeletedFilter]
     search_fields = ["title"]
     inlines = [PipelineStepRunInline, HighlightInline]
 
@@ -45,4 +61,5 @@ class SourceDocumentAdmin(admin.ModelAdmin):
 
 @admin.register(GeneratedReview)
 class GeneratedReviewAdmin(admin.ModelAdmin):
-    list_display = ["job", "generated_at"]
+    list_display = ["job", "generated_at", "edited_at", "edited_by"]
+    readonly_fields = ["original_structured", "edited_at", "edited_by"]

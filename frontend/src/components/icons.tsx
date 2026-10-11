@@ -104,6 +104,42 @@ export const ChevronDownIcon = (p: IconProps) => (
   </Icon>
 )
 
+export const ArrowUpIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M12 19V5M6 11l6-6 6 6" />
+  </Icon>
+)
+
+export const ArrowDownIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M12 5v14M18 13l-6 6-6-6" />
+  </Icon>
+)
+
+export const MoreHorizontalIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="5.5" cy="12" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="18.5" cy="12" r="1.3" fill="currentColor" stroke="none" />
+  </Icon>
+)
+
+export const ShareIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="18" cy="5.5" r="2.5" />
+    <circle cx="6" cy="12" r="2.5" />
+    <circle cx="18" cy="18.5" r="2.5" />
+    <path d="M8.2 10.8l7.6-4.1M8.2 13.2l7.6 4.1" />
+  </Icon>
+)
+
+export const RotateCcwIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M3 4v5h5" />
+    <path d="M3.5 13a8.5 8.5 0 1 0 2.1-6.4L3 9" />
+  </Icon>
+)
+
 export const ArrowLeftIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M19 12H5M11 18l-6-6 6-6" />
