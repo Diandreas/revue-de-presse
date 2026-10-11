@@ -16,6 +16,7 @@ import {
   UsersIcon,
   type IconComponent,
 } from '../components/icons'
+import { NotificationPreferencesCard } from '../components/NotificationPreferencesCard'
 import { Alert, Avatar, PageHeader, Spinner } from '../components/ui'
 import { useUpdateOrganization } from '../features/organization/useOrganization'
 import { formatDate } from '../lib/format'
@@ -169,6 +170,8 @@ export default function SettingsPage() {
               </li>
             </ul>
           </section>
+
+          <NotificationPreferencesCard />
         </div>
 
         <aside className="space-y-6">
