@@ -167,13 +167,17 @@ def present(structured):
     for section in structured.get("sections", []):
         rubrique = RUBRIQUE_BY_KEY.get(section.get("key"), RUBRIQUE_BY_KEY[DEFAULT_RUBRIQUE])
         entries = [{**entry, "source": media.display_name(entry.get("source"))} for entry in section.get("entries", [])]
+        if not structured.get("manual_order"):
+            # Revue corrigée à la main (press_review.services.editing) : l'ordre choisi par
+            # l'utilisateur est gardé tel quel.
+            entries = sorted(entries, key=lambda entry: media.rank(entry["source"]))
         sections.append(
             {
                 "key": rubrique["key"],
                 "title": rubrique["title"],
                 "color": rubrique["color"],
                 "icon": rubrique["icon"],
-                "entries": sorted(entries, key=lambda entry: media.rank(entry["source"])),
+                "entries": entries,
             }
         )
     return {

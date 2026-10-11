@@ -144,10 +144,12 @@ class JobListCreateView(OrganizationContextMixin, generics.ListCreateAPIView):
         # order_by explicite : Django n'applique pas Meta.ordering aux requêtes GROUP BY
         # (annotate + Count), la pagination serait alors instable.
         qs = (
-            PressReviewJob.objects.filter(organization=self.request.organization)
+            PressReviewJob.objects.visible()
+            .filter(organization=self.request.organization)
             .annotate(
                 documents_count=Count("documents", distinct=True),
-                highlights_count=Count("highlights", distinct=True),
+                # Les points clés masqués par l'utilisateur (faux positifs) ne comptent pas.
+                highlights_count=Count("highlights", filter=Q(highlights__hidden=False), distinct=True),
             )
             .order_by("-created_at")
         )
@@ -201,7 +203,7 @@ class JobStatsView(OrganizationContextMixin, APIView):
     permission_classes = [IsAuthenticated, IsOrgMember]
 
     def get(self, request):
-        stats = PressReviewJob.objects.filter(organization=request.organization).aggregate(
+        stats = PressReviewJob.objects.visible().filter(organization=request.organization).aggregate(
             total=Count("id"),
             active=Count("id", filter=Q(status__in=ACTIVE_JOB_STATUSES)),
             ready=Count(
@@ -209,7 +211,7 @@ class JobStatsView(OrganizationContextMixin, APIView):
             ),
             failed=Count("id", filter=Q(status=PressReviewJob.Status.FAILED)),
         )
-        stats["highlights"] = Highlight.objects.filter(job__organization=request.organization).count()
+        stats["highlights"] = Highlight.objects.filter(job__organization=request.organization, hidden=False).count()
         stats["documents"] = SourceDocument.objects.filter(
             organization=request.organization, job__isnull=False
         ).count()
@@ -221,7 +223,7 @@ class JobDetailView(OrganizationContextMixin, generics.RetrieveAPIView):
     serializer_class = PressReviewJobDetailSerializer
 
     def get_queryset(self):
-        return PressReviewJob.objects.filter(organization=self.request.organization)
+        return PressReviewJob.objects.visible().filter(organization=self.request.organization)
 
 
 class JobHighlightsView(OrganizationContextMixin, generics.ListAPIView):
@@ -230,11 +232,16 @@ class JobHighlightsView(OrganizationContextMixin, generics.ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        job = get_object_or_404(PressReviewJob, pk=self.kwargs["pk"], organization=self.request.organization)
+        job = get_object_or_404(
+            PressReviewJob.objects.visible(), pk=self.kwargs["pk"], organization=self.request.organization
+        )
         qs = Highlight.objects.filter(job=job).select_related("category")
         category_type = self.request.query_params.get("category")
         if category_type:
             qs = qs.filter(category__type=category_type)
+        hidden = self.request.query_params.get("hidden")  # ?hidden=false : sans les points masqués
+        if hidden in ("true", "false"):
+            qs = qs.filter(hidden=hidden == "true")
         return qs
 
 
@@ -242,7 +249,7 @@ class JobReviewView(OrganizationContextMixin, APIView):
     permission_classes = [IsAuthenticated, IsOrgMember]
 
     def get(self, request, pk):
-        job = get_object_or_404(PressReviewJob, pk=pk, organization=request.organization)
+        job = get_object_or_404(PressReviewJob.objects.visible(), pk=pk, organization=request.organization)
         review = getattr(job, "review", None)
         if review is None:
             raise NotFound("La revue n'est pas encore disponible pour ce job.")
@@ -253,7 +260,7 @@ class JobReviewExportView(OrganizationContextMixin, APIView):
     permission_classes = [IsAuthenticated, IsOrgMember]
 
     def get(self, request, pk):
-        job = get_object_or_404(PressReviewJob, pk=pk, organization=request.organization)
+        job = get_object_or_404(PressReviewJob.objects.visible(), pk=pk, organization=request.organization)
         review = getattr(job, "review", None)
         if review is None:
             raise NotFound("La revue n'est pas encore disponible pour ce job.")
@@ -276,7 +283,10 @@ class JobRetryView(OrganizationContextMixin, APIView):
 
     def post(self, request, pk):
         job = get_object_or_404(
-            PressReviewJob, pk=pk, organization=request.organization, status=PressReviewJob.Status.FAILED
+            PressReviewJob.objects.visible(),
+            pk=pk,
+            organization=request.organization,
+            status=PressReviewJob.Status.FAILED,
         )
         # On repasse tout de suite le job en TEXT_EXTRACTION : en arrière-plan, le worker
         # peut mettre plusieurs secondes à prendre la tâche, et un job resté FAILED

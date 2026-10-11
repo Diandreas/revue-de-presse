@@ -80,7 +80,7 @@ class PressReviewJobListSerializer(serializers.ModelSerializer):
         model = PressReviewJob
         fields = [
             "id", "title", "status", "progress_percent", "created_at", "completed_at",
-            "documents_count", "highlights_count",
+            "documents_count", "highlights_count", "created_by",
         ]
         read_only_fields = fields
 
@@ -93,7 +93,7 @@ class PressReviewJobDetailSerializer(serializers.ModelSerializer):
         model = PressReviewJob
         fields = [
             "id", "title", "status", "progress_percent", "error_message",
-            "started_at", "completed_at", "created_at", "step_runs", "documents",
+            "started_at", "completed_at", "created_at", "step_runs", "documents", "created_by",
         ]
         read_only_fields = fields
 
@@ -108,7 +108,10 @@ class HighlightSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Highlight
-        fields = ["id", "category", "excerpt", "explanation", "confidence", "page_number", "order", "source_document"]
+        fields = [
+            "id", "category", "excerpt", "explanation", "confidence", "page_number", "order", "source_document",
+            "hidden",
+        ]
         read_only_fields = fields
 
 
@@ -116,13 +119,30 @@ class GeneratedReviewSerializer(serializers.ModelSerializer):
     # Rubriques résolues (titre, couleur, pictogramme) ; null pour les revues antérieures
     # au format « revue de presse », que le frontend affiche alors en Markdown.
     structured = serializers.SerializerMethodField()
+    # Relecture (cf. services/editing.py) : revue corrigée à la main, par qui et quand ;
+    # catalogue des rubriques pour déplacer une notice vers une rubrique encore vide.
+    is_edited = serializers.BooleanField(read_only=True)
+    edited_by_name = serializers.SerializerMethodField()
+    rubriques = serializers.SerializerMethodField()
 
     class Meta:
         model = GeneratedReview
-        fields = ["summary_markdown", "structured", "pdf_file", "docx_file", "generated_at"]
+        fields = [
+            "summary_markdown", "structured", "pdf_file", "docx_file", "generated_at",
+            "is_edited", "edited_at", "edited_by_name", "rubriques",
+        ]
         read_only_fields = fields
 
     def get_structured(self, obj):
         from apps.ai_pipeline.press_format import present
 
         return present(obj.structured)
+
+    def get_edited_by_name(self, obj):
+        user = obj.edited_by
+        return (user.full_name or user.email) if user else None
+
+    def get_rubriques(self, obj):
+        from apps.ai_pipeline.press_format import RUBRIQUES
+
+        return [{key: rubrique[key] for key in ("key", "title", "color", "icon")} for rubrique in RUBRIQUES]
