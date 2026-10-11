@@ -12,7 +12,7 @@ MAILTO=""
 # BACKUP_PING_URL=https://hc-ping.com/<uuid>
 
 # Sauvegarde quotidienne à 02:30 (base + fichiers clients + .env, chiffrée, rotation 7/4/12).
-30 2 * * * /home/mirlab-presse/htdocs/presse.mirlab.cloud/ops/backup/backup.sh daily >> /var/log/revue-de-presse-backup.log 2>&1
+10 3 * * * /home/mirlab-presse/htdocs/presse.mirlab.cloud/ops/backup/backup.sh daily >> /var/log/revue-de-presse-backup.log 2>&1
 
 # Test de restauration dans une base JETABLE le 2 de chaque mois à 04:00 (jamais la base de prod).
 # 0 4 2 * * RESTORE_TEST_DATABASE_URL='postgres://revue_restore:MOTDEPASSE@127.0.0.1:5432/revue_restore_test' /home/mirlab-presse/htdocs/presse.mirlab.cloud/ops/backup/verify-backup.sh >> /var/log/revue-de-presse-backup.log 2>&1
