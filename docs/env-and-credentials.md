@@ -51,7 +51,7 @@ téléverse un justificatif, un membre `is_staff` de l'équipe plateforme valide
 
 | Variable | Description |
 |---|---|
-| `DJANGO_SECRET_KEY` | À régénérer avant toute mise en production. |
+| `DJANGO_SECRET_KEY` | Obligatoire en production : au moins 50 caractères aléatoires, sinon `config.settings.prod` refuse de démarrer. Sécurité de l'admin, des fichiers et du débit (`DJANGO_ADMIN_URL`, `DJANGO_NUM_PROXIES`, `MEDIA_*`, `REDIS_URL`) : voir `docs/securite.md`. |
 | `DATABASE_URL`, `REDIS_URL`/`CELERY_*` | Postgres et Redis — fournis par `docker-compose.yml` en dev. |
 | `EMAIL_HOST`/`EMAIL_PORT` | Pointent vers Mailpit en dev (UI web sur `http://localhost:8025`) ; à remplacer par un vrai SMTP en prod. |
 | `FRONTEND_BASE_URL` | Utilisée pour construire les liens dans les emails (invitation, etc.) et les URLs de retour Stripe Checkout. |
