@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react'
-import { CheckIcon, HighlighterIcon, ScaleIcon, ShieldIcon, SparkleIcon } from './icons'
+import { Link } from 'react-router-dom'
+import { ClippingIllustration } from './ClippingIllustration'
+import { CheckIcon, ShieldIcon, SparkleIcon } from './icons'
+import { LegalLinks } from './LegalLinks'
 import { Logo, LogoMark } from './Logo'
 import { WhatsAppButton } from './WhatsAppButton'
 import { WHATSAPP_DISPLAY } from '../lib/contact'
@@ -12,53 +15,6 @@ interface AuthShellProps {
   badge?: ReactNode
   /** Propose une démo guidée sur WhatsApp sous le formulaire (connexion, inscription). */
   demo?: boolean
-}
-
-/** Illustration : une coupure de presse dont l'IA a surligné les passages sensibles. */
-function ClippingIllustration() {
-  return (
-    <div className="relative mx-auto w-full max-w-md">
-      <div className="absolute -inset-6 rounded-[2rem] bg-brand-500/10 blur-2xl" />
-      <div className="relative rotate-[-1.5deg] rounded-2xl bg-paper p-6 text-slate-800 shadow-2xl ring-1 ring-black/5">
-        <div className="flex items-center justify-between border-b-2 border-slate-900 pb-2">
-          <p className="font-display text-sm font-bold tracking-tight">Le Quotidien</p>
-          <p className="text-[10px] tracking-widest text-slate-500 uppercase">Économie · Société</p>
-        </div>
-        <p className="mt-3 font-display text-xl leading-snug font-semibold">
-          Nouvelle réglementation des télécommunications : ce qui change pour les entreprises
-        </p>
-        <div className="mt-3 space-y-2 text-[12.5px] leading-relaxed text-slate-600">
-          <p>
-            Le texte adopté mardi prévoit{' '}
-            <mark className="rounded-sm bg-blue-200/70 px-0.5 text-slate-900">un délai de mise en conformité de six mois</mark>{' '}
-            pour les opérateurs concernés.
-          </p>
-          <p>
-            Selon un message relayé sur les réseaux sociaux,{' '}
-            <mark className="rounded-sm bg-amber-200/80 px-0.5 text-slate-900">
-              les sanctions atteindraient des milliards
-            </mark>
-            , une information démentie par le ministère.
-          </p>
-          <p>
-            L’article cite nommément{' '}
-            <mark className="rounded-sm bg-red-200/70 px-0.5 text-slate-900">un dirigeant accusé sans preuve</mark>.
-          </p>
-        </div>
-      </div>
-
-      <div className="absolute -top-4 -right-3 rotate-[3deg] rounded-xl bg-white px-3 py-2 text-xs font-semibold text-red-700 shadow-xl ring-1 ring-black/5">
-        <span className="flex items-center gap-1.5">
-          <ScaleIcon className="h-3.5 w-3.5" /> Risque juridique
-        </span>
-      </div>
-      <div className="absolute -bottom-5 -left-4 rotate-[-3deg] rounded-xl bg-white px-3 py-2 text-xs font-semibold text-amber-700 shadow-xl ring-1 ring-black/5">
-        <span className="flex items-center gap-1.5">
-          <HighlighterIcon className="h-3.5 w-3.5" /> Intox potentielle
-        </span>
-      </div>
-    </div>
-  )
 }
 
 const SELLING_POINTS = [
@@ -81,7 +37,9 @@ export function AuthShell({ title, subtitle, children, footer, badge, demo = fal
             backgroundSize: '44px 44px',
           }}
         />
-        <Logo tone="light" subtitle="Veille média augmentée par l’IA" className="relative" />
+        <Link to="/" className="relative w-fit rounded-xl" aria-label="Revue de Presse — accueil">
+          <Logo tone="light" subtitle="Veille média augmentée par l’IA" />
+        </Link>
 
         <div className="relative space-y-10">
           <div>
@@ -110,7 +68,9 @@ export function AuthShell({ title, subtitle, children, footer, badge, demo = fal
 
       <main className="flex flex-1 flex-col">
         <div className="flex items-center justify-between px-5 py-5 lg:hidden">
-          <Logo />
+          <Link to="/" className="rounded-xl" aria-label="Revue de Presse — accueil">
+            <Logo />
+          </Link>
         </div>
         <div className="flex flex-1 items-center justify-center px-5 pt-4 pb-12 sm:px-8">
           <div className="w-full max-w-[400px] animate-slide-up">
@@ -131,10 +91,13 @@ export function AuthShell({ title, subtitle, children, footer, badge, demo = fal
             )}
           </div>
         </div>
-        <p className="flex items-center justify-center gap-1.5 pb-6 text-xs text-slate-400">
-          <SparkleIcon className="h-3.5 w-3.5" />
-          Analyse propulsée par l’IA · © {new Date().getFullYear()} Revue de Presse
-        </p>
+        <footer className="space-y-2 px-5 pb-6">
+          <LegalLinks />
+          <p className="flex items-center justify-center gap-1.5 text-xs text-slate-400">
+            <SparkleIcon className="h-3.5 w-3.5" />
+            Analyse propulsée par l’IA · © {new Date().getFullYear()} Revue de Presse
+          </p>
+        </footer>
       </main>
     </div>
   )

@@ -11,10 +11,14 @@ const CategoriesPage = lazy(() => import('./routes/CategoriesPage'))
 const DashboardPage = lazy(() => import('./routes/DashboardPage'))
 const InvitationAcceptPage = lazy(() => import('./routes/InvitationAcceptPage'))
 const JobDetailPage = lazy(() => import('./routes/JobDetailPage'))
+const LandingPage = lazy(() => import('./routes/LandingPage'))
+const LegalNoticePage = lazy(() => import('./routes/LegalNoticePage'))
 const LoginPage = lazy(() => import('./routes/LoginPage'))
+const PrivacyPage = lazy(() => import('./routes/PrivacyPage'))
 const RegisterPage = lazy(() => import('./routes/RegisterPage'))
 const SettingsPage = lazy(() => import('./routes/SettingsPage'))
 const TeamPage = lazy(() => import('./routes/TeamPage'))
+const TermsPage = lazy(() => import('./routes/TermsPage'))
 const UploadPage = lazy(() => import('./routes/UploadPage'))
 
 export default function App() {
@@ -24,6 +28,11 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/invitations/:token/accept" element={<InvitationAcceptPage />} />
+        {/* Site public : accueil (un utilisateur connecté est renvoyé vers /dashboard) et pages légales. */}
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/cgu" element={<TermsPage />} />
+        <Route path="/confidentialite" element={<PrivacyPage />} />
+        <Route path="/mentions-legales" element={<LegalNoticePage />} />
 
         <Route
           element={
@@ -32,7 +41,6 @@ export default function App() {
             </RequireAuth>
           }
         >
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/jobs/:jobId" element={<JobDetailPage />} />

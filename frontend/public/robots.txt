@@ -1,0 +1,17 @@
+# Revue de Presse — seules les pages publiques (accueil, inscription, pages légales) sont
+# à indexer ; l'espace client, l'API, l'administration et les fichiers déposés ne le sont pas.
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /media/
+Disallow: /dashboard
+Disallow: /upload
+Disallow: /jobs/
+Disallow: /categories
+Disallow: /team
+Disallow: /billing
+Disallow: /settings
+Disallow: /invitations/
+
+Sitemap: https://presse.mirlab.cloud/sitemap.xml

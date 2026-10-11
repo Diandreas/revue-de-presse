@@ -168,6 +168,17 @@ export default function SettingsPage() {
                 L’IA peut se tromper : relisez les points sensibles (risques juridiques, intox) avant toute diffusion.
               </li>
             </ul>
+            <p className="mt-5 border-t border-slate-100 pt-4 text-sm text-slate-500">
+              Détails dans la{' '}
+              <Link to="/confidentialite" className="font-semibold text-brand-600 hover:text-brand-700">
+                politique de confidentialité
+              </Link>{' '}
+              et les{' '}
+              <Link to="/cgu" className="font-semibold text-brand-600 hover:text-brand-700">
+                conditions générales
+              </Link>
+              .
+            </p>
           </section>
         </div>
 

@@ -14,6 +14,7 @@ import {
   XIcon,
   type IconComponent,
 } from './icons'
+import { LegalLinks } from './LegalLinks'
 import { Logo, LogoMark } from './Logo'
 import { SidebarUsageCard } from './UsageCard'
 import { WhatsAppButton } from './WhatsAppButton'
@@ -126,6 +127,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
             <LogOutIcon className="h-[18px] w-[18px]" />
           </button>
         </div>
+        <LegalLinks tone="light" onNavigate={onNavigate} />
       </div>
     </div>
   )
