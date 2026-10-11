@@ -17,6 +17,9 @@ SECRET_KEY = env("DJANGO_SECRET_KEY", default="dev-insecure-key-change-me")
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 FRONTEND_BASE_URL = env("FRONTEND_BASE_URL", default="http://localhost:5173")
+# Chemin de l'administration Django. En production, préférez un chemin difficile à
+# deviner (ex. "gestion-7f3k9q/") : `check --deploy` le signale sinon (core.W001).
+ADMIN_URL = (env("DJANGO_ADMIN_URL", default="admin/").strip("/") or "admin") + "/"
 
 DJANGO_APPS = [
     "django.contrib.admin",
@@ -51,6 +54,7 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "apps.core.middleware.AdminLoginThrottleMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -101,6 +105,18 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "mediafiles"
 
+# Fichiers clients privés (cf. apps.core.media) : jamais servis en accès libre ; chaque
+# URL renvoyée par l'API est un lien signé, lié au fichier, valable MEDIA_URL_MAX_AGE s.
+STORAGES = {
+    "default": {"BACKEND": "apps.core.media.PrivateMediaStorage"},
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+}
+MEDIA_URL_MAX_AGE = env.int("MEDIA_URL_MAX_AGE", default=30 * 60)
+# True derrière nginx (prod) : Django vérifie la signature puis délègue l'envoi à
+# l'emplacement « internal » MEDIA_X_ACCEL_PREFIX (ops/nginx/presse-media.conf).
+MEDIA_X_ACCEL_REDIRECT = env.bool("MEDIA_X_ACCEL_REDIRECT", default=False)
+MEDIA_X_ACCEL_PREFIX = "/protected-media/"
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- DRF ---
@@ -117,6 +133,30 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
     "TEST_REQUEST_DEFAULT_FORMAT": "json",
     "EXCEPTION_HANDLER": "apps.core.exceptions.api_exception_handler",
+    # Limitation de débit (cf. apps.core.throttling) : globale par IP / par utilisateur,
+    # puis par route sensible et par adresse e-mail saisie. Compteurs dans CACHES.
+    "DEFAULT_THROTTLE_CLASSES": (
+        "apps.core.throttling.AnonRateThrottle",
+        "apps.core.throttling.UserRateThrottle",
+        "apps.core.throttling.RouteScopedRateThrottle",
+        "apps.core.throttling.EmailRateThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "120/min",
+        "user": "600/min",  # le suivi d'une revue interroge l'API toutes les 2,5 s
+        "login": "10/min",
+        "login_email": "10/min",
+        "register": "5/hour",
+        "invitations": "60/hour",
+        "password_reset": "10/hour",
+        "password_reset_email": "5/hour",
+        "uploads": "120/hour",  # une revue = jusqu'à 50 photos
+        "jobs": "30/hour",
+        "admin_login": "10/min",
+    },
+    # Nombre de proxys de confiance devant Django (nginx = 1) : l'IP du client est alors lue
+    # dans X-Forwarded-For sans pouvoir être falsifiée. Vide = REMOTE_ADDR (dev).
+    "NUM_PROXIES": env.int("DJANGO_NUM_PROXIES", default=None),
 }
 
 SPECTACULAR_SETTINGS = {
@@ -124,6 +164,13 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "API de génération procédurale de revues de presse assistée par IA.",
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    # /api/docs/ et /api/schema/ réservés à l'équipe plateforme (is_staff), connectée à
+    # l'admin Django (session) ou avec un jeton. Ouverts à tous en dev (settings/dev.py).
+    "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAdminUser"],
+    "SERVE_AUTHENTICATION": [
+        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
 }
 
 # --- Auth ---
@@ -148,6 +195,23 @@ REFRESH_TOKEN_COOKIE_SAMESITE = "Lax"
 # --- CORS (SPA React servie sur un port différent en dev) ---
 CORS_ALLOWED_ORIGINS = env.list("DJANGO_CORS_ALLOWED_ORIGINS", default=[FRONTEND_BASE_URL])
 CORS_ALLOW_CREDENTIALS = True
+
+# --- Cache (compteurs de la limitation de débit) ---
+# Redis en production, partagé par tous les workers ; base dédiée conseillée
+# (ex. redis://127.0.0.1:6379/2) pour ne pas cohabiter avec la file Celery.
+REDIS_URL = env("REDIS_URL", default="")
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+            "KEY_PREFIX": "presse",
+            # Redis arrêté : échec rapide, la limitation est alors ignorée (cf. apps.core.throttling).
+            "OPTIONS": {"socket_connect_timeout": 1, "socket_timeout": 1},
+        }
+    }
+else:
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "presse"}}
 
 # --- Celery ---
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://localhost:6379/0")

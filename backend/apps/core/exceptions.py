@@ -1,4 +1,20 @@
+import math
+
+from rest_framework.exceptions import Throttled
 from rest_framework.views import exception_handler as drf_exception_handler
+
+
+def throttled_message(wait):
+    """« Trop de tentatives » + délai lisible (le Retry-After reste fourni par DRF)."""
+    if not wait:
+        return "Trop de tentatives. Réessayez dans quelques instants."
+    seconds = math.ceil(wait)
+    if seconds < 60:
+        delay = f"{seconds} seconde{'s' if seconds > 1 else ''}"
+    else:
+        minutes = math.ceil(seconds / 60)
+        delay = f"{minutes} minute{'s' if minutes > 1 else ''}"
+    return f"Trop de tentatives. Réessayez dans {delay}."
 
 
 def api_exception_handler(exc, context):
@@ -8,6 +24,10 @@ def api_exception_handler(exc, context):
     response = drf_exception_handler(exc, context)
     if response is None:
         return None
+
+    if isinstance(exc, Throttled):
+        response.data = {"detail": throttled_message(exc.wait)}
+        return response
 
     data = response.data
     if isinstance(data, list):

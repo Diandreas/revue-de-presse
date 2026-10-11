@@ -5,6 +5,14 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.accounts.models import Membership, Organization, User
 
 
+@pytest.fixture(autouse=True)
+def _reset_throttle_counters():
+    """Les compteurs de limitation de débit vivent dans le cache : chaque test repart de zéro."""
+    from django.core.cache import cache
+
+    cache.clear()
+
+
 @pytest.fixture
 def api_client():
     return APIClient()
