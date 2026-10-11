@@ -3,7 +3,7 @@ Content-Type déclarés, et le fichier est stocké avec l'extension du type dét
 import io
 
 import pytest
-from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.files.uploadedfile import SimpleUploadedFile, TemporaryUploadedFile
 from PIL import Image
 
 from apps.billing.models import Invoice, Subscription
@@ -145,6 +145,26 @@ def test_validate_upload_rejects_an_empty_file():
             SimpleUploadedFile("vide.pdf", b"", content_type="application/pdf"),
             allowed_types=uploads.SOURCE_DOCUMENT_TYPES, max_size=1024, formats_message="?",
         )
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [(make_minimal_pdf_bytes(["Gros PDF."]), uploads.PDF), (make_image_bytes(fmt="JPEG"), uploads.JPEG)],
+)
+def test_large_uploads_written_to_disk_are_verified_too(content, expected):
+    """Au-delà de 2,5 Mo, Django écrit le fichier sur disque (TemporaryUploadedFile)."""
+    upload = TemporaryUploadedFile("scan.bin", "application/octet-stream", len(content), None)
+    upload.write(content)
+    upload.seek(0)
+    try:
+        detected = uploads.validate_upload(
+            upload, allowed_types=uploads.SOURCE_DOCUMENT_TYPES, max_size=30 * 1024 * 1024, formats_message="?"
+        )
+        assert detected is expected
+        assert upload.name == f"scan{expected.extension}"
+        assert upload.read() == content  # rembobiné, prêt à être stocké
+    finally:
+        upload.close()
 
 
 def test_detection_ignores_the_declared_name_and_type():
