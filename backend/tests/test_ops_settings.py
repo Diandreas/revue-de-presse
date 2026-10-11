@@ -93,7 +93,7 @@ def test_dev_settings_still_work_locally():
 def test_prod_settings_require_a_real_secret_key():
     missing = _import_settings("config.settings.prod", DJANGO_SECRET_KEY="", SENTRY_DSN="")
     default = _import_settings("config.settings.prod", DJANGO_SECRET_KEY="dev-insecure-key-change-me", SENTRY_DSN="")
-    real = _import_settings("config.settings.prod", DJANGO_SECRET_KEY="k9!Qz2#vL7mP0sR4tW8yB1cE5gH3jN6xA-uD_fK*iO+lS@nT%", SENTRY_DSN="")
+    real = _import_settings("config.settings.prod", DJANGO_SECRET_KEY="k9!Qz2#vL7mP0sR4tW8yB1cE5gH3jN6xA-uD_fK*iO+lS@nT%Vb3Xe7Ym2Za8", SENTRY_DSN="")
 
     assert missing.returncode != 0 and "DJANGO_SECRET_KEY" in missing.stderr
     assert default.returncode != 0

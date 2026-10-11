@@ -430,6 +430,16 @@ def test_preferences_endpoint_requires_authentication(api_client):
 
 @pytest.mark.django_db
 def test_periodic_tasks_are_created_by_migration():
+    # On rejoue la migration : un test transactionnel ailleurs dans la suite vide la base
+    # (flush), ce qui efface les lignes créées par les migrations de données.
+    import importlib
+
+    from django.apps import apps as registry
+
+    migration = importlib.import_module("apps.notifications.migrations.0002_periodic_tasks")
+    PeriodicTask.objects.filter(task__startswith="apps.notifications.tasks.").delete()
+    migration.create_periodic_tasks(registry, None)
+
     tasks = dict(PeriodicTask.objects.values_list("task", "enabled"))
 
     assert tasks.get("apps.notifications.tasks.fail_stuck_jobs") is True
