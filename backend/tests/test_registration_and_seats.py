@@ -16,6 +16,7 @@ from apps.accounts.services import (
     TRIAL_ALREADY_USED_MESSAGE,
     create_invitation,
     register_organization_owner,
+    seats_available,
 )
 from apps.billing.models import Invoice, Subscription
 from apps.press_review.models import GeneratedReview, Highlight, PressReviewJob, SourceDocument
@@ -217,6 +218,26 @@ def test_acceptance_is_refused_when_the_plan_was_reduced_since_the_invitation(ap
     assert response.status_code == 400
     assert "a atteint le nombre de places de sa formule (3)" in response.data["detail"]
     assert not Membership.objects.filter(organization=org, user=invited).exists()
+
+
+@pytest.mark.django_db
+def test_the_last_reserved_seat_can_be_taken_by_its_invitation(api_client):
+    org, owner = _org_with_seats(max_seats=3, members=2)
+    invitation = create_invitation(organization=org, email="invite@presse.cm", role=MEMBER, invited_by=owner)
+    assert seats_available(org) == 0
+    assert seats_available(org, exclude_invitation=invitation) == 1
+    invited = UserFactory(email="invite@presse.cm")
+    _authenticate(api_client, invited)
+
+    response = api_client.post(f"/api/auth/invitations/{invitation.token}/accept/")
+
+    assert response.status_code == 200, response.data
+    assert Membership.objects.filter(organization=org, user=invited).exists()
+
+
+@pytest.mark.django_db
+def test_seats_available_is_none_without_subscription():
+    assert seats_available(OrganizationFactory()) is None
 
 
 @pytest.mark.django_db

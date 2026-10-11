@@ -15,6 +15,7 @@ import {
   type IconComponent,
 } from './icons'
 import { Logo, LogoMark } from './Logo'
+import { OrganizationSwitcher } from './OrganizationSwitcher'
 import { SidebarUsageCard } from './UsageCard'
 import { WhatsAppButton } from './WhatsAppButton'
 import { Avatar, FullPageLoader } from './ui'
@@ -53,6 +54,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           <Logo tone="light" subtitle={organization?.name} />
         </Link>
       </div>
+
+      <OrganizationSwitcher onSwitched={onNavigate} />
 
       <div className="px-4">
         <Link

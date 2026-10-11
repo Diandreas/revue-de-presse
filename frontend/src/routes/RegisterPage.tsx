@@ -9,13 +9,21 @@ import { useAuth } from '../auth/useAuth'
 import { AuthShell } from '../components/AuthShell'
 import { ArrowRightIcon, GiftIcon } from '../components/icons'
 import { PasswordInput } from '../components/PasswordInput'
+import { TermsCheckbox } from '../components/TermsCheckbox'
+import { useToast } from '../components/Toast'
 import { Alert, Spinner } from '../components/ui'
 
 const schema = z.object({
   organization_name: z.string().trim().min(2, 'Le nom de l’entreprise est requis.'),
   full_name: z.string().trim().min(2, 'Votre nom est requis.'),
-  email: z.string().trim().email('Adresse email invalide.'),
+  email: z.string().trim().toLowerCase().email('Adresse email invalide.'),
+  // Contrôle complet (format camerounais / international) côté serveur.
+  phone_number: z
+    .string()
+    .trim()
+    .refine((value) => value.replace(/\D/g, '').length >= 8, 'Votre numéro WhatsApp est requis.'),
   password: z.string().min(10, 'Au moins 10 caractères.'),
+  accept_terms: z.boolean().refine((value) => value, 'Vous devez accepter les conditions pour créer votre compte.'),
 })
 
 type FormValues = z.infer<typeof schema>
@@ -23,18 +31,21 @@ type FormValues = z.infer<typeof schema>
 export default function RegisterPage() {
   const { register: registerAccount } = useAuth()
   const navigate = useNavigate()
+  const toast = useToast()
   const [serverError, setServerError] = useState<string | null>(null)
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) })
+  } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { accept_terms: false } })
 
   const onSubmit = async (values: FormValues) => {
     setServerError(null)
     try {
-      await registerAccount(values)
+      const { trialNotice } = await registerAccount(values)
+      // Essai déjà utilisé avec ce numéro : l'espace est créé, l'équipe active l'abonnement.
+      if (trialNotice) toast.info(trialNotice)
       navigate('/dashboard', { replace: true })
     } catch (error) {
       setServerError(extractErrorMessage(error, 'Impossible de créer le compte.'))
@@ -103,6 +114,25 @@ export default function RegisterPage() {
           {errors.email && <p className="field-error">{errors.email.message}</p>}
         </div>
         <div>
+          <label className="label" htmlFor="reg-phone">
+            Numéro WhatsApp
+          </label>
+          <input
+            id="reg-phone"
+            type="tel"
+            autoComplete="tel"
+            inputMode="tel"
+            placeholder="6 93 42 79 13"
+            className={clsx('input', errors.phone_number && 'input-error')}
+            {...register('phone_number')}
+          />
+          {errors.phone_number ? (
+            <p className="field-error">{errors.phone_number.message}</p>
+          ) : (
+            <p className="field-hint">Pour vous accompagner pendant l’essai et activer votre abonnement.</p>
+          )}
+        </div>
+        <div>
           <label className="label" htmlFor="reg-password">
             Mot de passe
           </label>
@@ -118,6 +148,11 @@ export default function RegisterPage() {
             <p className="field-hint">10 caractères minimum.</p>
           )}
         </div>
+        <TermsCheckbox
+          id="reg-terms"
+          error={errors.accept_terms?.message}
+          {...register('accept_terms')}
+        />
         {serverError && <Alert tone="danger">{serverError}</Alert>}
         <button type="submit" disabled={isSubmitting} className="btn-primary btn-lg w-full">
           {isSubmitting ? <Spinner /> : null}

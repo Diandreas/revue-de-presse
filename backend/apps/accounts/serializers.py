@@ -94,10 +94,12 @@ class PasswordChangeSerializer(serializers.Serializer):
 
 class MembershipSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
+    # Après l'acceptation d'une invitation, le frontend bascule sur l'organisation rejointe.
+    organization = serializers.UUIDField(source="organization_id", read_only=True)
 
     class Meta:
         model = Membership
-        fields = ["id", "user", "role", "created_at"]
+        fields = ["id", "user", "role", "organization", "created_at"]
         read_only_fields = fields
 
 

@@ -122,18 +122,39 @@ def seat_usage(organization):
     }
 
 
-def _ensure_seat_for_invitation(organization):
+def seats_available(organization, *, exclude_invitation=None):
+    """Places encore libres selon la formule (jamais négatif), None sans abonnement.
+
+    Même signature et même sémantique que billing.services.seats_available (paquet
+    « billing ») : à l'acceptation, `exclude_invitation` évite que l'invitation acceptée,
+    qui occupe déjà une place dans le décompte, se bloque elle-même. À la fusion des
+    branches, cette fonction peut simplement déléguer à celle de billing."""
     usage = seat_usage(organization)
-    if usage["limit"] is not None and usage["used"] >= usage["limit"]:
+    if usage["limit"] is None:
+        return None
+    used = usage["used"]
+    if (
+        exclude_invitation is not None
+        and exclude_invitation.status == Invitation.Status.PENDING
+        and not exclude_invitation.is_expired
+    ):
+        used -= 1
+    return max(0, usage["limit"] - used)
+
+
+def _ensure_seat_for_invitation(organization):
+    if seats_available(organization) == 0:
+        usage = seat_usage(organization)
         raise ValueError(SEATS_FULL_MESSAGE.format(used=usage["used"], limit=usage["limit"]))
 
 
-def _ensure_seat_for_new_member(organization):
-    """À l'acceptation, seule compte la place des membres (l'invitation acceptée réservait
-    déjà la sienne) : refuse si la formule a été réduite depuis l'invitation."""
-    usage = seat_usage(organization)
-    if usage["limit"] is not None and usage["members"] >= usage["limit"]:
-        raise ValueError(SEATS_FULL_ON_ACCEPT_MESSAGE.format(name=organization.name, limit=usage["limit"]))
+def _ensure_seat_for_new_member(invitation):
+    """À l'acceptation, l'invitation acceptée garde sa place réservée : refuse seulement si la
+    formule n'a plus de place pour elle (formule réduite depuis l'invitation…)."""
+    organization = invitation.organization
+    if seats_available(organization, exclude_invitation=invitation) == 0:
+        limit = seat_usage(organization)["limit"]
+        raise ValueError(SEATS_FULL_ON_ACCEPT_MESSAGE.format(name=organization.name, limit=limit))
 
 
 # --- Inscription et invitations -----------------------------------------------------------
@@ -257,7 +278,7 @@ def accept_invitation(*, token, user):
 
     organization = invitation.organization
     if not Membership.objects.filter(organization=organization, user=user).exists():
-        _ensure_seat_for_new_member(organization)
+        _ensure_seat_for_new_member(invitation)
     membership, _created = Membership.objects.get_or_create(
         organization=organization,
         user=user,
@@ -275,7 +296,7 @@ def register_invited_member(*, token, password, full_name, accept_terms=False):
     invitation = _pending_invitation_for_update(token)
     if User.objects.filter(email__iexact=invitation.email).exists():
         raise ValueError("Un compte existe déjà avec cet email — connectez-vous puis acceptez l'invitation.")
-    _ensure_seat_for_new_member(invitation.organization)
+    _ensure_seat_for_new_member(invitation)
 
     user = User.objects.create_user(
         email=invitation.email, password=password, full_name=full_name, **_terms_fields(accept_terms)

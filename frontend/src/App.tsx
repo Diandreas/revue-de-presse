@@ -16,6 +16,8 @@ const RegisterPage = lazy(() => import('./routes/RegisterPage'))
 const SettingsPage = lazy(() => import('./routes/SettingsPage'))
 const TeamPage = lazy(() => import('./routes/TeamPage'))
 const UploadPage = lazy(() => import('./routes/UploadPage'))
+const ForgotPasswordPage = lazy(() => import('./routes/ForgotPasswordPage'))
+const ResetPasswordPage = lazy(() => import('./routes/ResetPasswordPage'))
 
 export default function App() {
   return (
@@ -24,6 +26,8 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/invitations/:token/accept" element={<InvitationAcceptPage />} />
+        <Route path="/mot-de-passe-oublie" element={<ForgotPasswordPage />} />
+        <Route path="/reinitialiser-mot-de-passe/:uid/:token" element={<ResetPasswordPage />} />
 
         <Route
           element={

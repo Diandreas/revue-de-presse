@@ -32,6 +32,8 @@ export interface Membership {
   id: string
   user: User
   role: MembershipRole
+  /** Identifiant de l'organisation de cette adhésion. */
+  organization?: string
   created_at: string
 }
 
@@ -210,4 +212,39 @@ export interface Paginated<T> {
 export interface ApiErrorBody {
   detail?: string
   errors?: unknown
+  /** Code machine de certaines erreurs (ex : `organization_access_lost`). */
+  code?: string
+}
+
+/* --- Comptes et équipe ------------------------------------------------------------- */
+
+/** Une organisation de l'utilisateur connecté (sélecteur d'organisation). */
+export interface UserOrganization {
+  id: string
+  name: string
+  slug: string
+  my_role: MembershipRole
+}
+
+/** Places de la formule : membres + invitations en attente, sur `limit` (null = sans abonnement). */
+export interface SeatUsage {
+  members: number
+  pending_invitations: number
+  used: number
+  limit: number | null
+  available: number | null
+}
+
+export interface PasswordResetLink {
+  reset_url: string
+  expires_at: string
+}
+
+export interface RegisterResponse {
+  access: string
+  user: User
+  organization: Organization
+  trial_granted: boolean
+  /** Message à afficher si l'essai gratuit n'a pas été accordé (numéro déjà utilisé…). */
+  trial_notice: string | null
 }

@@ -1,14 +1,16 @@
 import clsx from 'clsx'
 import { useState, type FormEvent } from 'react'
 import { extractErrorMessage } from '../api/client'
-import type { Invitation, Membership, MembershipRole } from '../api/types'
-import { isAdminRole, useAuth } from '../auth/useAuth'
+import type { Invitation, Membership, MembershipRole, PasswordResetLink, SeatUsage } from '../api/types'
+import { canManageRole, isAdminRole, useAuth } from '../auth/useAuth'
 import { Modal } from '../components/Modal'
 import { useToast } from '../components/Toast'
 import {
   ClockIcon,
   LinkIcon,
+  LockIcon,
   MailIcon,
+  SettingsIcon,
   ShieldIcon,
   StarIcon,
   TrashIcon,
@@ -18,28 +20,32 @@ import {
   type IconComponent,
 } from '../components/icons'
 import { Alert, Avatar, CopyButton, EmptyState, PageHeader, ProgressBar, Segmented, Skeleton, Spinner } from '../components/ui'
-import { useSubscription } from '../features/billing/useBilling'
+import { WhatsAppButton } from '../components/WhatsAppButton'
 import {
+  useChangeMemberRole,
   useInvitations,
   useInviteMember,
+  useMemberResetLink,
   useMembers,
   useRemoveMember,
   useRevokeInvitation,
+  useSeats,
+  useTransferOwnership,
 } from '../features/organization/useOrganization'
-import { formatDate, formatRelative, plural } from '../lib/format'
+import { formatDate, formatDateTime, formatRelative, plural } from '../lib/format'
 
 const ROLE_META: Record<MembershipRole, { label: string; className: string; icon: IconComponent; description: string }> = {
   owner: {
     label: 'Propriétaire',
     className: 'bg-amber-50 text-amber-800 ring-1 ring-amber-200',
     icon: StarIcon,
-    description: 'Tous les droits, y compris l’abonnement et la gestion des administrateurs.',
+    description: 'Tous les droits : administrateurs, transfert de propriété, export et fermeture de l’organisation.',
   },
   admin: {
     label: 'Administrateur',
     className: 'bg-brand-50 text-brand-700 ring-1 ring-brand-200',
     icon: ShieldIcon,
-    description: 'Invite des collègues, gère les catégories de détection et l’abonnement.',
+    description: 'Invite et gère les membres, gère les catégories de détection et l’abonnement.',
   },
   member: {
     label: 'Membre',
@@ -59,13 +65,42 @@ function RoleChip({ role }: { role: MembershipRole }) {
   )
 }
 
-function InviteCard() {
+/** « x / y places » : membres + invitations en attente (même calcul que le serveur). */
+function SeatsMeter({ seats }: { seats: SeatUsage }) {
+  if (seats.limit === null) return null
+  return (
+    <div className="w-full max-w-[240px]">
+      <div className="mb-1.5 flex justify-between text-xs">
+        <span className="font-medium text-slate-600">Places utilisées</span>
+        <span className="text-slate-500 tabular-nums">
+          {seats.used} / {seats.limit}
+        </span>
+      </div>
+      <ProgressBar
+        size="sm"
+        percent={(seats.used / Math.max(1, seats.limit)) * 100}
+        tone={seats.used >= seats.limit ? 'amber' : 'brand'}
+      />
+      {seats.pending_invitations > 0 && (
+        <p className="mt-1 text-[11px] text-slate-400">
+          dont {plural(seats.pending_invitations, 'invitation en attente', 'invitations en attente')}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function InviteCard({ myRole, seats }: { myRole: MembershipRole | null | undefined; seats: SeatUsage | undefined }) {
   const toast = useToast()
+  const { organization } = useAuth()
   const inviteMutation = useInviteMember()
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<'member' | 'admin'>('member')
   const [error, setError] = useState<string | null>(null)
   const [lastInvitation, setLastInvitation] = useState<Invitation | null>(null)
+  // Seul un propriétaire peut inviter un administrateur (règle appliquée aussi par le serveur).
+  const canInviteAdmins = myRole === 'owner'
+  const seatsFull = seats?.available === 0
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault()
@@ -75,7 +110,10 @@ function InviteCard() {
       return
     }
     try {
-      const invitation = await inviteMutation.mutateAsync({ email: email.trim(), role })
+      const invitation = await inviteMutation.mutateAsync({
+        email: email.trim(),
+        role: canInviteAdmins ? role : 'member',
+      })
       setLastInvitation(invitation)
       setEmail('')
       toast.success(`Invitation créée pour ${invitation.email}.`)
@@ -96,6 +134,25 @@ function InviteCard() {
         </div>
       </div>
 
+      {seatsFull && (
+        <Alert
+          tone="warning"
+          title="Toutes les places sont utilisées"
+          className="mt-5"
+          action={
+            <WhatsAppButton
+              topic="billing"
+              organizationName={organization?.name}
+              label="Ajouter des places sur WhatsApp"
+              className="w-full"
+            />
+          }
+        >
+          Votre formule compte {plural(seats?.limit ?? 0, 'place')}, invitations en attente comprises. Retirez un membre
+          ou annulez une invitation, ou contactez-nous pour en ajouter.
+        </Alert>
+      )}
+
       <form className="mt-5 space-y-4" onSubmit={(e) => void handleSubmit(e)} noValidate>
         <div>
           <label className="label" htmlFor="invite-email">
@@ -108,24 +165,31 @@ function InviteCard() {
             className="input"
             placeholder="prenom.nom@entreprise.cm"
             value={email}
+            disabled={seatsFull}
             onChange={(e) => setEmail(e.target.value)}
           />
         </div>
-        <div>
-          <span className="label">Rôle</span>
-          <Segmented
-            className="w-full"
-            value={role}
-            onChange={setRole}
-            options={[
-              { value: 'member', label: 'Membre' },
-              { value: 'admin', label: 'Administrateur' },
-            ]}
-          />
-          <p className="field-hint">{ROLE_META[role].description}</p>
-        </div>
+        {canInviteAdmins ? (
+          <div>
+            <span className="label">Rôle</span>
+            <Segmented
+              className="w-full"
+              value={role}
+              onChange={setRole}
+              options={[
+                { value: 'member', label: 'Membre' },
+                { value: 'admin', label: 'Administrateur' },
+              ]}
+            />
+            <p className="field-hint">{ROLE_META[role].description}</p>
+          </div>
+        ) : (
+          <p className="field-hint">
+            Vous invitez en tant que <strong>membre</strong>. Seul un propriétaire peut inviter un administrateur.
+          </p>
+        )}
         {error && <Alert tone="danger">{error}</Alert>}
-        <button type="submit" className="btn-primary w-full" disabled={inviteMutation.isPending || !email}>
+        <button type="submit" className="btn-primary w-full" disabled={inviteMutation.isPending || !email || seatsFull}>
           {inviteMutation.isPending ? <Spinner /> : <MailIcon className="h-4 w-4" />}
           Créer l’invitation
         </button>
@@ -150,7 +214,7 @@ function InviteCard() {
   )
 }
 
-function PendingInvitations() {
+function PendingInvitations({ myRole }: { myRole: MembershipRole | null | undefined }) {
   const toast = useToast()
   const { data: invitations, isLoading } = useInvitations(true)
   const revokeMutation = useRevokeInvitation()
@@ -169,7 +233,9 @@ function PendingInvitations() {
       <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-3 sm:px-6">
         <div>
           <h2 className="section-title">Invitations en attente</h2>
-          <p className="text-xs text-slate-500">Copiez le lien pour le renvoyer, ou annulez l’invitation.</p>
+          <p className="text-xs text-slate-500">
+            Copiez le lien pour le renvoyer, ou annulez l’invitation. Chaque invitation réserve une place.
+          </p>
         </div>
         {invitations && invitations.length > 0 && (
           <span className="chip bg-amber-50 text-amber-800 ring-1 ring-amber-200">{invitations.length}</span>
@@ -202,23 +268,25 @@ function PendingInvitations() {
                       )}
                     >
                       <ClockIcon className="h-3.5 w-3.5" />
-                      {expired ? 'Expirée' : `Expire ${formatRelative(invitation.expires_at)}`}
+                      {expired ? 'Expirée — réinvitez pour la renouveler' : `Expire ${formatRelative(invitation.expires_at)}`}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 pl-[52px] sm:pl-0">
                   <RoleChip role={invitation.role} />
                   <CopyButton text={invitation.accept_url} label="Lien" />
-                  <button
-                    type="button"
-                    className="btn-icon text-slate-400 hover:bg-red-50 hover:text-red-600"
-                    aria-label={`Annuler l’invitation de ${invitation.email}`}
-                    title="Annuler l’invitation"
-                    disabled={revokeMutation.isPending && revokeMutation.variables === invitation.id}
-                    onClick={() => void revoke(invitation)}
-                  >
-                    <XIcon className="h-4 w-4" />
-                  </button>
+                  {canManageRole(myRole, invitation.role) && (
+                    <button
+                      type="button"
+                      className="btn-icon text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      aria-label={`Annuler l’invitation de ${invitation.email}`}
+                      title="Annuler l’invitation"
+                      disabled={revokeMutation.isPending && revokeMutation.variables === invitation.id}
+                      onClick={() => void revoke(invitation)}
+                    >
+                      <XIcon className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </li>
             )
@@ -229,28 +297,177 @@ function PendingInvitations() {
   )
 }
 
-export default function TeamPage() {
+type PendingConfirmation = 'transfer' | 'remove' | null
+
+/** Gestion d'un membre : rôle (propriétaire), lien de réinitialisation du mot de passe,
+ * transfert de propriété (propriétaire) et retrait de l'équipe. */
+function ManageMemberModal({
+  membership,
+  myRole,
+  onClose,
+}: {
+  membership: Membership
+  myRole: MembershipRole | null | undefined
+  onClose: () => void
+}) {
   const toast = useToast()
-  const { user, organization } = useAuth()
-  const isAdmin = isAdminRole(organization?.my_role)
-  const { data: members, isLoading } = useMembers()
-  const { data: subscription } = useSubscription()
-  const removeMutation = useRemoveMember()
-  const [toRemove, setToRemove] = useState<Membership | null>(null)
+  const { refreshOrganization } = useAuth()
+  const changeRole = useChangeMemberRole()
+  const resetLink = useMemberResetLink()
+  const transfer = useTransferOwnership()
+  const removeMember = useRemoveMember()
+  const [role, setRole] = useState<MembershipRole>(membership.role)
+  const [link, setLink] = useState<PasswordResetLink | null>(null)
+  const [confirming, setConfirming] = useState<PendingConfirmation>(null)
+  const [error, setError] = useState<string | null>(null)
+  const name = membership.user.full_name || membership.user.email
+  const isOwner = myRole === 'owner'
 
-  const seats = subscription?.plan.max_seats ?? null
-  const memberCount = members?.length ?? 0
-
-  const confirmRemove = async () => {
-    if (!toRemove) return
+  const run = async (action: () => Promise<unknown>, success: string, closeAfter = true) => {
+    setError(null)
     try {
-      await removeMutation.mutateAsync(toRemove.id)
-      toast.success(`${toRemove.user.full_name || toRemove.user.email} a été retiré de l’équipe.`)
+      await action()
+      toast.success(success)
+      if (closeAfter) onClose()
     } catch (err) {
-      toast.error(extractErrorMessage(err, 'Impossible de retirer ce membre.'))
+      setError(extractErrorMessage(err, 'Action impossible pour le moment.'))
+      setConfirming(null)
     }
-    setToRemove(null)
   }
+
+  const saveRole = () =>
+    run(
+      () => changeRole.mutateAsync({ membershipId: membership.id, role }),
+      `${name} est maintenant ${ROLE_META[role].label.toLowerCase()}.`,
+    )
+
+  const generateLink = () =>
+    run(
+      async () => setLink(await resetLink.mutateAsync(membership.id)),
+      'Lien de réinitialisation prêt à être transmis.',
+      false,
+    )
+
+  const transferOwnership = () =>
+    run(async () => {
+      await transfer.mutateAsync(membership.id)
+      await refreshOrganization()
+    }, `${name} est le nouveau propriétaire. Vous êtes désormais administrateur.`)
+
+  const remove = () => run(() => removeMember.mutateAsync(membership.id), `${name} a été retiré de l’équipe.`)
+
+  return (
+    <Modal open onClose={onClose} title={`Gérer ${name}`} description={membership.user.email}>
+      <div className="space-y-6">
+        {error && <Alert tone="danger">{error}</Alert>}
+
+        {isOwner && (
+          <section>
+            <h3 className="text-sm font-semibold text-slate-900">Rôle</h3>
+            <Segmented
+              className="mt-2 w-full"
+              value={role}
+              onChange={setRole}
+              options={[
+                { value: 'member', label: 'Membre' },
+                { value: 'admin', label: 'Admin' },
+                { value: 'owner', label: 'Propriétaire' },
+              ]}
+            />
+            <p className="field-hint">{ROLE_META[role].description}</p>
+            <button
+              type="button"
+              className="btn-primary btn-sm mt-3"
+              disabled={role === membership.role || changeRole.isPending}
+              onClick={() => void saveRole()}
+            >
+              {changeRole.isPending ? <Spinner /> : null}
+              Enregistrer le rôle
+            </button>
+          </section>
+        )}
+
+        <section>
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+            <LockIcon className="h-4 w-4 text-slate-400" /> Mot de passe oublié
+          </h3>
+          <p className="mt-1 text-[13px] leading-relaxed text-slate-600">
+            Générez un lien à usage unique et transmettez-le à {name} (WhatsApp, e-mail…) pour qu’il choisisse un
+            nouveau mot de passe. Ne le partagez avec personne d’autre.
+          </p>
+          {link ? (
+            <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3">
+              <div className="flex items-center gap-2">
+                <code className="min-w-0 flex-1 truncate rounded-lg bg-white px-2.5 py-1.5 text-xs text-slate-600 ring-1 ring-emerald-200">
+                  {link.reset_url}
+                </code>
+                <CopyButton text={link.reset_url} label="Copier" />
+              </div>
+              <p className="mt-2 text-xs text-emerald-800">Valable jusqu’au {formatDateTime(link.expires_at)}.</p>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn-secondary btn-sm mt-3"
+              disabled={resetLink.isPending}
+              onClick={() => void generateLink()}
+            >
+              {resetLink.isPending ? <Spinner /> : <LinkIcon className="h-4 w-4" />}
+              Générer un lien de réinitialisation
+            </button>
+          )}
+        </section>
+
+        {isOwner && membership.role !== 'owner' && (
+          <section>
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+              <StarIcon className="h-4 w-4 text-amber-500" /> Transférer la propriété
+            </h3>
+            <p className="mt-1 text-[13px] leading-relaxed text-slate-600">
+              {name} deviendra propriétaire de l’organisation ; vous resterez administrateur.
+            </p>
+            <button
+              type="button"
+              className={clsx('btn-sm mt-3', confirming === 'transfer' ? 'btn-primary' : 'btn-secondary')}
+              disabled={transfer.isPending}
+              onClick={() => (confirming === 'transfer' ? void transferOwnership() : setConfirming('transfer'))}
+            >
+              {transfer.isPending ? <Spinner /> : <StarIcon className="h-4 w-4" />}
+              {confirming === 'transfer' ? 'Confirmer le transfert' : 'Transférer la propriété'}
+            </button>
+          </section>
+        )}
+
+        <section className="border-t border-slate-100 pt-5">
+          <h3 className="text-sm font-semibold text-slate-900">Retirer de l’équipe</h3>
+          <p className="mt-1 text-[13px] leading-relaxed text-slate-600">
+            {name} n’aura plus accès aux revues de l’organisation. Ses revues et documents restent disponibles pour
+            l’équipe.
+          </p>
+          <button
+            type="button"
+            className="btn-danger btn-sm mt-3"
+            disabled={removeMember.isPending}
+            onClick={() => (confirming === 'remove' ? void remove() : setConfirming('remove'))}
+          >
+            {removeMember.isPending ? <Spinner /> : <TrashIcon className="h-4 w-4" />}
+            {confirming === 'remove' ? 'Confirmer le retrait' : 'Retirer de l’équipe'}
+          </button>
+        </section>
+      </div>
+    </Modal>
+  )
+}
+
+export default function TeamPage() {
+  const { user, organization } = useAuth()
+  const myRole = organization?.my_role
+  const isAdmin = isAdminRole(myRole)
+  const { data: members, isLoading } = useMembers()
+  const { data: seats } = useSeats()
+  const [managed, setManaged] = useState<Membership | null>(null)
+
+  const memberCount = members?.length ?? 0
 
   return (
     <div className="space-y-8">
@@ -270,21 +487,7 @@ export default function TeamPage() {
                   {isLoading ? 'Chargement…' : plural(memberCount, 'personne', 'personnes')} dans {organization?.name}
                 </p>
               </div>
-              {seats !== null && members && (
-                <div className="w-full max-w-[220px]">
-                  <div className="mb-1.5 flex justify-between text-xs">
-                    <span className="font-medium text-slate-600">Places utilisées</span>
-                    <span className="text-slate-500 tabular-nums">
-                      {memberCount} / {seats}
-                    </span>
-                  </div>
-                  <ProgressBar
-                    size="sm"
-                    percent={(memberCount / Math.max(1, seats)) * 100}
-                    tone={memberCount >= seats ? 'amber' : 'brand'}
-                  />
-                </div>
-              )}
+              {seats && <SeatsMeter seats={seats} />}
             </div>
 
             <ul className="divide-y divide-slate-100 border-t border-slate-100">
@@ -311,15 +514,15 @@ export default function TeamPage() {
                       </p>
                     </div>
                     <RoleChip role={membership.role} />
-                    {isAdmin && !isSelf && (
+                    {!isSelf && canManageRole(myRole, membership.role) && (
                       <button
                         type="button"
-                        className="btn-icon text-slate-400 hover:bg-red-50 hover:text-red-600"
-                        aria-label={`Retirer ${name}`}
-                        title="Retirer de l’équipe"
-                        onClick={() => setToRemove(membership)}
+                        className="btn-icon text-slate-400"
+                        aria-label={`Gérer ${name}`}
+                        title="Rôle, mot de passe, retrait…"
+                        onClick={() => setManaged(membership)}
                       >
-                        <TrashIcon className="h-4 w-4" />
+                        <SettingsIcon className="h-4 w-4" />
                       </button>
                     )}
                   </li>
@@ -338,12 +541,12 @@ export default function TeamPage() {
             )}
           </section>
 
-          {isAdmin && <PendingInvitations />}
+          {isAdmin && <PendingInvitations myRole={myRole} />}
         </div>
 
         <aside className="space-y-6 lg:sticky lg:top-6">
           {isAdmin ? (
-            <InviteCard />
+            <InviteCard myRole={myRole} seats={seats} />
           ) : (
             <Alert tone="info" title="Inviter un collègue">
               Seuls les propriétaires et administrateurs peuvent inviter de nouveaux membres. Demandez-leur un lien
@@ -367,30 +570,7 @@ export default function TeamPage() {
         </aside>
       </div>
 
-      <Modal
-        open={toRemove !== null}
-        onClose={() => setToRemove(null)}
-        title="Retirer ce membre ?"
-        description={
-          toRemove ? `${toRemove.user.full_name || toRemove.user.email} n’aura plus accès aux revues de l’organisation.` : undefined
-        }
-        footer={
-          <>
-            <button type="button" className="btn-secondary" onClick={() => setToRemove(null)}>
-              Annuler
-            </button>
-            <button type="button" className="btn-danger" disabled={removeMutation.isPending} onClick={() => void confirmRemove()}>
-              {removeMutation.isPending ? <Spinner /> : <TrashIcon className="h-4 w-4" />}
-              Retirer
-            </button>
-          </>
-        }
-      >
-        <p className="text-sm leading-relaxed text-slate-600">
-          Les revues et documents qu’il a créés restent disponibles pour le reste de l’équipe. Vous pourrez l’inviter à
-          nouveau plus tard.
-        </p>
-      </Modal>
+      {managed && <ManageMemberModal membership={managed} myRole={myRole} onClose={() => setManaged(null)} />}
     </div>
   )
 }

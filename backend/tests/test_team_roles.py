@@ -277,7 +277,9 @@ def test_accepting_a_second_organization_then_switching_with_the_header(api_clie
     PressReviewJob.objects.create(organization=employer, title="Revue de l'employeur")
     _authenticate(api_client, user)
 
-    assert api_client.post(f"/api/auth/invitations/{invitation.token}/accept/").status_code == 200
+    accepted = api_client.post(f"/api/auth/invitations/{invitation.token}/accept/")
+    assert accepted.status_code == 200, accepted.data
+    assert accepted.data["organization"] == str(employer.id)
     response = api_client.get("/api/jobs/", HTTP_X_ORGANIZATION_ID=str(employer.id))
 
     assert response.status_code == 200
