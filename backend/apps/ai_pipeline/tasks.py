@@ -422,15 +422,15 @@ def task_detect_highlights(self, job_id):
 
             if total and unreadable_chunks == total:
                 raise last_parse_error
-            if unmatched or unreadable_chunks or discarded:
-                update_step_progress(
-                    job, step_name, chunks_done=total, chunks_total=max(total, 1),
-                    extra={
-                        "unmatched_categories": sorted(unmatched),
-                        "unreadable_chunks": unreadable_chunks,
-                        "discarded_highlights": dict(discarded),
-                    },
-                )
+            # Toujours réécrit : une relance ne doit pas afficher les écarts de la tentative précédente.
+            update_step_progress(
+                job, step_name, chunks_done=total, chunks_total=max(total, 1),
+                extra={
+                    "unmatched_categories": sorted(unmatched),
+                    "unreadable_chunks": unreadable_chunks,
+                    "discarded_highlights": dict(discarded),
+                },
+            )
             mark_step_result(job, step_name, result=PipelineStepRun.Status.SUCCEEDED)
         except Exception as exc:
             _handle_step_error(self, job, step_name, exc)

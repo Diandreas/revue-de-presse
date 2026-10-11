@@ -3,7 +3,7 @@ lancer l'analyse : une revue trop grosse est refusée avec un message clair au l
 saturer le débit IA partagé ou d'échouer au bout de vingt minutes.
 
 Réglages (`AI_REVIEW_LIMITS`, par code de formule, « default » pour les autres) :
-    {"default": {"max_documents": 30, "max_pages": 80}, "starter": {...}, ...}
+    {"default": {"max_documents": 40, "max_pages": 80}, "starter": {...}, ...}
 et `AI_MAX_PDF_PAGES` : longueur maximale d'UN PDF (garde-fou mémoire / coût, appliqué
 aussi pendant l'extraction). 0 = pas de limite.
 
@@ -16,7 +16,7 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_REVIEW_LIMITS = {"max_documents": 30, "max_pages": 80}
+DEFAULT_REVIEW_LIMITS = {"max_documents": 40, "max_pages": 80}
 DEFAULT_MAX_PDF_PAGES = 100
 
 CONTACT_HINT = "Répartissez-les sur plusieurs revues, ou contactez-nous pour une formule adaptée à vos volumes."

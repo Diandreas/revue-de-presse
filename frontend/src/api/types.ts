@@ -125,6 +125,8 @@ export interface Highlight {
   page_number: number | null
   order: number
   source_document: string | null
+  /** Journal dont provient le point clé (« CAMEROON TRIBUNE »), null si inconnu. */
+  source_name?: string | null
 }
 
 /** Notice d'un journal dans la revue de presse. */

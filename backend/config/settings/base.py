@@ -237,11 +237,12 @@ AI_RATE_LIMIT_CACHE = env("AI_RATE_LIMIT_CACHE", default="default")
 # Plafonds par revue selon la formule (code du plan ; « default » pour les autres) et
 # longueur maximale d'un PDF. Vérifiés avant le lancement de l'analyse.
 AI_MAX_PDF_PAGES = env.int("AI_MAX_PDF_PAGES", default=100)
+# Une revue type compte 20 à 50 photos de unes : les plafonds laissent cette marge.
 AI_REVIEW_LIMITS = env.json("AI_REVIEW_LIMITS", default={
-    "default": {"max_documents": 30, "max_pages": 80},
-    "starter": {"max_documents": 20, "max_pages": 40},
-    "pro": {"max_documents": 40, "max_pages": 120},
-    "enterprise": {"max_documents": 50, "max_pages": 250},
+    "default": {"max_documents": 40, "max_pages": 80},
+    "starter": {"max_documents": 30, "max_pages": 60},
+    "pro": {"max_documents": 50, "max_pages": 150},
+    "enterprise": {"max_documents": 80, "max_pages": 300},
 })
 # Journal des appels IA (AIUsage) et tarifs $/million de jetons pour l'estimation du coût
 # (JSON {"modèle": [entrée, sortie]}, s'ajoute aux tarifs indicatifs d'ai_pipeline/usage.py).
