@@ -161,7 +161,8 @@ def test_subscription_api_exposes_usage(api_client):
 
     assert data["is_trial"] is True
     assert data["reviews_used"] == 2
-    assert data["reviews_limit"] == 10
+    # Essai : TRIAL_MAX_REVIEWS (3) revues pour tout l'essai, pas le quota mensuel du plan.
+    assert data["reviews_limit"] == 3
 
 
 # --- Revues et documents -------------------------------------------------------------

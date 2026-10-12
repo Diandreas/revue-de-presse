@@ -139,7 +139,9 @@ function CurrentPlanCard({
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-5 backdrop-blur">
-          <p className="text-xs font-semibold tracking-wide text-slate-300 uppercase">Revues ce mois-ci</p>
+          <p className="text-xs font-semibold tracking-wide text-slate-300 uppercase">
+            {subscription.status === 'trialing' ? 'Revues de l’essai' : 'Revues ce mois-ci'}
+          </p>
           <p className="mt-2 font-display text-3xl font-semibold tabular-nums">
             {formatNumber(subscription.reviews_used)}
             <span className="text-lg text-slate-400"> / {formatNumber(subscription.reviews_limit)}</span>

@@ -353,6 +353,8 @@ CAMPAY_BASE_URL = env("CAMPAY_BASE_URL", default="https://demo.campay.net/api")
 # nouveau compte ne peut lancer aucune revue avant qu'un paiement ait été validé.
 TRIAL_DAYS = env.int("TRIAL_DAYS", default=7)
 TRIAL_PLAN_CODE = env("TRIAL_PLAN_CODE", default="starter")
+# Revues de presse offertes pendant tout l'essai (remplace le quota mensuel de la formule).
+TRIAL_MAX_REVIEWS = env.int("TRIAL_MAX_REVIEWS", default=3)
 SUBSCRIPTION_RENEWAL_REMINDER_DAYS_BEFORE = (3, 1)
 # Mode de facturation : « manual » (défaut) = aucun paiement en ligne, le client contacte
 # l'équipe (WhatsApp) et un membre du staff active / prolonge l'abonnement dans l'admin

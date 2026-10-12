@@ -2,7 +2,7 @@ import clsx from 'clsx'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
-import { usageStateOf, type UsageState } from '../features/billing/usage'
+import { quotaPeriodLabel, usageStateOf, type UsageState } from '../features/billing/usage'
 import { useSubscription } from '../features/billing/useBilling'
 import { formatDate, plural } from '../lib/format'
 import { AlertTriangleIcon, GiftIcon, ZapIcon } from './icons'
@@ -45,7 +45,7 @@ export function SidebarUsageCard({ onNavigate }: { onNavigate?: () => void }) {
         </div>
         <ProgressBar percent={ratio} tone="light" size="sm" className="mt-3" />
         <p className="mt-2 text-[11px] text-slate-400 tabular-nums">
-          {state.used} / {state.limit} revues ce mois-ci
+          {state.used} / {state.limit} revues {quotaPeriodLabel(state)}
         </p>
       </Link>
     )
@@ -113,9 +113,11 @@ function bannerFor(state: UsageState): { tone: 'amber' | 'red'; message: string 
   }
   if (state.limit > 0 && state.used / state.limit >= 0.8) {
     const reached = state.used >= state.limit
+    const period = quotaPeriodLabel(state)
+    const next = state.kind === 'trial' ? 'souscrire une formule' : 'passer à une formule supérieure'
     return {
       tone: reached ? 'red' : 'amber',
-      message: `${reached ? `Quota atteint : ${state.limit} revues ce mois-ci.` : `${state.used} revues sur ${state.limit} utilisées ce mois-ci.`} Contactez-nous pour passer à une formule supérieure.`,
+      message: `${reached ? `Quota atteint : ${state.limit} revues ${period}.` : `${state.used} revues sur ${state.limit} utilisées ${period}.`} Contactez-nous pour ${next}.`,
     }
   }
   return null

@@ -286,7 +286,7 @@ function Hero() {
           <div className="mt-5 space-y-1 text-sm text-slate-400">
             <p className="flex items-start gap-2">
               <GiftIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
-              7 jours gratuits, sans carte bancaire ni engagement
+              7 jours gratuits, 3 revues offertes, sans carte bancaire ni engagement
             </p>
             <p className="pl-6">Démo guidée sur WhatsApp : {WHATSAPP_DISPLAY}</p>
           </div>
@@ -467,6 +467,10 @@ function Trial() {
             <li className="flex items-start gap-2.5">
               <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
               Votre espace d’entreprise prêt en une minute
+            </li>
+            <li className="flex items-start gap-2.5">
+              <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              3 revues de presse complètes offertes, sur vos propres journaux
             </li>
             <li className="flex items-start gap-2.5">
               <CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />

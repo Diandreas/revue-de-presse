@@ -36,7 +36,8 @@ class SubscriptionSerializer(serializers.ModelSerializer):
     plan = PlanSerializer(read_only=True)
     is_trial = serializers.SerializerMethodField()
     reviews_used = serializers.SerializerMethodField()
-    reviews_limit = serializers.IntegerField(source="plan.max_reviews_per_month", read_only=True)
+    # Quota de l'essai (TRIAL_MAX_REVIEWS) ou quota mensuel de la formule.
+    reviews_limit = serializers.SerializerMethodField()
     # Formule demandée au paiement, appliquée seulement une fois le paiement confirmé.
     pending_plan_code = serializers.SerializerMethodField()
     # Mêmes règles que le serveur (délai de grâce compris) : l'interface n'a rien à recalculer.
@@ -65,6 +66,11 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         from .services import SubscriptionService
 
         return SubscriptionService.reviews_used(obj)
+
+    def get_reviews_limit(self, obj):
+        from .services import SubscriptionService
+
+        return SubscriptionService.reviews_limit(obj)
 
     def get_has_access(self, obj):
         from .services import SubscriptionService

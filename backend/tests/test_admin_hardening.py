@@ -2,12 +2,12 @@
 contre la force brute, documentation de l'API réservée au staff, clé secrète exigée."""
 import importlib
 import os
+import secrets
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
-from django.core.management.utils import get_random_secret_key
 from django.test import Client
 from django.urls import clear_url_caches
 from rest_framework.test import APIClient
@@ -174,7 +174,9 @@ def test_production_starts_with_a_strong_key_and_debug_forced_off(monkeypatch):
     monkeypatch.delenv("DJANGO_NUM_PROXIES", raising=False)
     monkeypatch.delenv("DJANGO_SECURE_HSTS_SECONDS", raising=False)
 
-    prod = _load_production_settings(monkeypatch, DJANGO_SECRET_KEY=get_random_secret_key(), DJANGO_DEBUG="True")
+    # token_urlsafe et non get_random_secret_key : une clé commençant par « $ » serait lue
+    # par django-environ comme une référence à une autre variable (échec aléatoire du test).
+    prod = _load_production_settings(monkeypatch, DJANGO_SECRET_KEY=secrets.token_urlsafe(50), DJANGO_DEBUG="True")
 
     assert prod.DEBUG is False
     assert prod.MEDIA_X_ACCEL_REDIRECT is True

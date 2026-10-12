@@ -28,6 +28,10 @@ QUOTA_REACHED_MESSAGE = (
     "Quota atteint : {limit} revues ce mois-ci avec la formule {plan}. Contactez notre équipe "
     "(page « Abonnement ») pour passer à une formule supérieure, ou attendez le mois suivant."
 )
+TRIAL_QUOTA_REACHED_MESSAGE = (
+    "Votre essai gratuit comprend {limit} revues de presse et vous les avez toutes utilisées. "
+    "Contactez notre équipe (WhatsApp, page « Abonnement ») pour souscrire et continuer."
+)
 MANUAL_BILLING_MESSAGE = (
     "Le paiement en ligne n'est pas disponible : notre équipe active et renouvelle les abonnements. "
     "Contactez-nous sur WhatsApp au {contact} (page « Abonnement »)."
@@ -276,6 +280,14 @@ class SubscriptionService:
         return window
 
     @staticmethod
+    def reviews_limit(subscription):
+        """Revues autorisées : TRIAL_MAX_REVIEWS pour tout l'essai (7 jours, donc une seule
+        tranche de quota), sinon le quota mensuel de la formule."""
+        if subscription.status == Subscription.Status.TRIALING:
+            return getattr(settings, "TRIAL_MAX_REVIEWS", subscription.plan.max_reviews_per_month)
+        return subscription.plan.max_reviews_per_month
+
+    @staticmethod
     def reviews_used(subscription):
         """Nombre de revues lancées sur le mois de quota en cours."""
         from apps.press_review.models import PressReviewJob
@@ -297,8 +309,10 @@ class SubscriptionService:
             if subscription.status in (Subscription.Status.ACTIVE, Subscription.Status.PAST_DUE):
                 return SUBSCRIPTION_EXPIRED_MESSAGE
             return NO_SUBSCRIPTION_MESSAGE
-        limit = subscription.plan.max_reviews_per_month
+        limit = SubscriptionService.reviews_limit(subscription)
         if SubscriptionService.reviews_used(subscription) >= limit:
+            if subscription.status == Subscription.Status.TRIALING:
+                return TRIAL_QUOTA_REACHED_MESSAGE.format(limit=limit)
             return QUOTA_REACHED_MESSAGE.format(limit=limit, plan=subscription.plan.name)
         return None
 

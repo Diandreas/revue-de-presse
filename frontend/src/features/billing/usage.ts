@@ -52,6 +52,11 @@ export function usageStateOf(subscription: Subscription | null | undefined, isLo
   return { kind: 'inactive', status: subscription.status, planName: subscription.plan.name }
 }
 
+/** Période sur laquelle les revues sont décomptées : tout l'essai, ou le mois en cours. */
+export function quotaPeriodLabel(state: UsageState): string {
+  return state.kind === 'trial' || state.kind === 'trial-expired' ? 'pendant l’essai' : 'ce mois-ci'
+}
+
 /** Message bloquant si une nouvelle revue sera refusée par le serveur, sinon null. */
 export function blockingReason(state: UsageState): string | null {
   switch (state.kind) {
@@ -63,6 +68,9 @@ export function blockingReason(state: UsageState): string | null {
     case 'expired':
       return 'Votre abonnement est arrivé à échéance : contactez notre équipe pour le renouveler.'
     case 'trial':
+      return state.used >= state.limit
+        ? `Les ${state.limit} revues de votre essai gratuit sont utilisées : contactez notre équipe pour souscrire une formule.`
+        : null
     case 'active':
       return state.used >= state.limit
         ? `Quota atteint (${state.limit} revues ce mois-ci) : contactez notre équipe pour passer à une formule supérieure.`

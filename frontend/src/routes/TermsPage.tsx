@@ -68,8 +68,8 @@ const SECTIONS: LegalSection[] = [
     body: (
       <ul>
         <li>
-          La création d’un espace ouvre un essai gratuit de 7 jours, sans moyen de paiement ni engagement, dans les limites
-          (nombre de revues et de membres) de la formule d’essai affichées dans l’espace.
+          La création d’un espace ouvre un essai gratuit de 7 jours, limité à 3 revues de presse, sans moyen de paiement
+          ni engagement, dans la limite de membres affichée dans l’espace.
         </li>
         <li>
           À la fin de l’essai, aucune somme n’est due et aucun abonnement n’est souscrit automatiquement. Les revues déjà
